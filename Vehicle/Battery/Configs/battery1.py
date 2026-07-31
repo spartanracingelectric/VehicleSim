@@ -4,6 +4,22 @@ from Vehicle.Battery.Battery import Battery
 test_current_A = 5.0
 cell_resistance_ohm = 6.7e-3
 
+# pack layout
+num_modules = 10
+cells_per_module = 14
+thermistors_per_module = 10
+series_cells = num_modules * cells_per_module
+parallel_cells = 3
+
+# thermal model
+specific_heat_jpkgk = 900.0
+thermal_resistance_kpw = None
+
+# sensor offsets
+cell_voltage_offsets_mV = [0.0] * series_cells
+temperature_offsets_C = [0.0] * (num_modules * thermistors_per_module)
+hv_sense_offset_V = 0.0
+
 test_data = [
     (0.000, 2.810),
     (0.008, 2.840),
@@ -99,14 +115,22 @@ test_data = [
 
 battery1 = Battery(
     mass_kg=50.8,
-    series_cells=140,
-    parallel_cells=3,
+    series_cells=series_cells,
+    parallel_cells=parallel_cells,
     cell_capacity_ah=5.0,
     cell_nominal_voltage_v=3.6,
     cell_internal_resistance_ohm=cell_resistance_ohm,
     cell_max_discharge_current_a=125.0,
+    specific_heat_jpkgk=specific_heat_jpkgk,
+    thermal_resistance_kpw=thermal_resistance_kpw,
     ocv_soc=[row[0] for row in test_data],
     ocv_cell_voltage_v=[
         row[1] + test_current_A * cell_resistance_ohm for row in test_data
     ],
+    num_modules=num_modules,
+    cells_per_module=cells_per_module,
+    thermistors_per_module=thermistors_per_module,
+    cell_voltage_offsets_mV=cell_voltage_offsets_mV,
+    temperature_offsets_C=temperature_offsets_C,
+    hv_sense_offset_V=hv_sense_offset_V,
 )

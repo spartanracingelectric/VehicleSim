@@ -15,6 +15,12 @@ class Battery:
         thermal_resistance_kpw=None,
         ocv_soc=None,
         ocv_cell_voltage_v=None,
+        num_modules=10,
+        cells_per_module=14,
+        thermistors_per_module=10,
+        cell_voltage_offsets_mV=None,
+        temperature_offsets_C=None,
+        hv_sense_offset_V=0.0,
     ):
         self.mass_kg = mass_kg
         self.series_cells = series_cells
@@ -25,6 +31,22 @@ class Battery:
         self.cell_max_discharge_current_a = cell_max_discharge_current_a
         self.specific_heat_jpkgk = specific_heat_jpkgk
         self.thermal_resistance_kpw = thermal_resistance_kpw
+        self.num_modules = num_modules
+        self.cells_per_module = cells_per_module
+        self.thermistors_per_module = thermistors_per_module
+        self.hv_sense_offset_V = hv_sense_offset_V
+
+        if num_modules * cells_per_module != series_cells:
+            raise ValueError("Module cell count does not match series cell count")
+
+        if cell_voltage_offsets_mV is None:
+            cell_voltage_offsets_mV = [0.0] * series_cells
+        if temperature_offsets_C is None:
+            temperature_offsets_C = [0.0] * (
+                num_modules * thermistors_per_module
+            )
+        self.cell_voltage_offsets_mV = cell_voltage_offsets_mV
+        self.temperature_offsets_C = temperature_offsets_C
 
         self.total_cells = series_cells * parallel_cells
         self.capacity_ah = parallel_cells * cell_capacity_ah
@@ -82,6 +104,9 @@ class Battery:
         sim.charged_energy_kWh[i + 1] = (
             sim.charged_energy_kWh[i] + max(-energy, 0)
         )
+        sim.shunt_coulomb_count_C[i + 1] = (
+            sim.shunt_coulomb_count_C[i] + sim.current_A[i] * dt
+        )
 
     def currentForPower(self, power_W, voltage_V):
         d = voltage_V**2 - 4 * self.internal_resistance_ohm * power_W
@@ -111,3 +136,71 @@ class Battery:
         return final_temp + (temp_C - final_temp) * math.exp(
             -dt / time_constant
         )
+
+    # BMS stuff.
+    def getCellVoltages_mV(self, sim, i=None):
+        if i is None:
+            i = len(sim.time_s) - 2
+
+        cell_voltage_V = sim.terminal_voltage_V[i] / self.series_cells
+        voltages = []
+        for cell in range(self.series_cells):
+            voltage_mV = cell_voltage_V * 1000
+            voltage_mV += self.cell_voltage_offsets_mV[cell]
+            voltages.append(round(voltage_mV))
+        return voltages
+
+    def getTemperatures_C(self, sim, i=None):
+        if i is None:
+            i = len(sim.time_s) - 2
+
+        temperatures = []
+        temp_C = sim.temp_C[i + 1]
+        for thermistor in range(len(self.temperature_offsets_C)):
+            temperature = temp_C + self.temperature_offsets_C[thermistor]
+            temperatures.append(int(temperature))
+        return temperatures
+
+    def getModuleData(self, sim, i=None):
+        cell_voltages = self.getCellVoltages_mV(sim, i)
+        temperatures = self.getTemperatures_C(sim, i)
+        modules = []
+
+        for module in range(self.num_modules):
+            first_cell = module * self.cells_per_module
+            last_cell = first_cell + self.cells_per_module
+            first_therm = module * self.thermistors_per_module
+            last_therm = first_therm + self.thermistors_per_module
+            modules.append({
+                "cellVoltage_mV": cell_voltages[first_cell:last_cell],
+                "pointTemp_C": temperatures[first_therm:last_therm],
+            })
+        return modules
+
+    def getHvSensePackVoltage_cV(self, sim, i=None):
+        if i is None:
+            i = len(sim.time_s) - 2
+        voltage_V = sim.terminal_voltage_V[i] + self.hv_sense_offset_V
+        return round(voltage_V * 100)
+
+    def getShuntCurrent_mA(self, sim, i=None):
+        if i is None:
+            i = len(sim.time_s) - 2
+        return round(sim.current_A[i] * 1000)
+
+    def getBMSInputs(self, sim, i=None):
+        if i is None:
+            i = len(sim.time_s) - 2
+
+        modules = self.getModuleData(sim, i)
+        cell_voltages = []
+        for module in modules:
+            cell_voltages.extend(module["cellVoltage_mV"])
+
+        return {
+            "moduleData": modules,
+            "sumPackVoltage_cV": round(sum(cell_voltages) / 10),
+            "hvSensePackVoltage_cV": self.getHvSensePackVoltage_cV(sim, i),
+            "shuntCurrent_mA": self.getShuntCurrent_mA(sim, i),
+            "shuntCoulombCount_C": sim.shunt_coulomb_count_C[i + 1],
+        }

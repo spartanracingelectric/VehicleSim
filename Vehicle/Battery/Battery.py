@@ -78,8 +78,6 @@ class Battery:
         sim.current_A[i] = self.currentForPower(
             sim.requested_power_W[i], sim.open_circuit_voltage_V[i]
         )
-        if sim.current_A[i] > self.max_discharge_current_a:
-            raise ValueError("Battery current limit exceeded")
 
         sim.terminal_voltage_V[i] = (
             sim.open_circuit_voltage_V[i]

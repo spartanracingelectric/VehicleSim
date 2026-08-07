@@ -113,7 +113,7 @@ test_data = [
     (1.000, 4.040),
 ]
 
-battery1 = Battery(
+sr17 = Battery(
     mass_kg=50.8,
     series_cells=series_cells,
     parallel_cells=parallel_cells,

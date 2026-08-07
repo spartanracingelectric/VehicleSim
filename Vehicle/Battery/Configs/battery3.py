@@ -1,5 +1,5 @@
-from Vehicle.Battery.BatteryConfig import BatteryConfig #TODO: Rename battery3.py to the correct name
+from Vehicle.Battery.Battery import Battery
 
-battery3 = BatteryConfig(
+battery3 = Battery(
     mass_kg=55.8,
 )

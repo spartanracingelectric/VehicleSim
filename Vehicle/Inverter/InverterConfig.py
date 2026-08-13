@@ -1,41 +1,28 @@
-class InverterConfig: #TODO: # // don't let longGPT cook this shit alone PLS 
-    def __init__(self, mass_kg, max_current_a, con_current_a, max_dc_voltage_v):
-        #// self.mass_kg = mass_kg                        # // saw this in battery code, idk what it's used for
-        self.max_current_a = max_current_a                # // peak current
-        self.con_current_a = con_current_a                # // continuous current
-        self.max_dc_voltage_v = max_dc_voltage_v          # // max dc input
+class InverterConfig: #TODO: 
+    def __init__(self, max_current_a, con_current_a, max_dc_voltage_v):                      
+        self.max_current_a = max_current_a                
+        self.con_current_a = con_current_a                
+        self.max_dc_voltage_v = max_dc_voltage_v       
+        self.current_a = 0.0
 
-    def inverterCalc(self, i, sim):
+    def current_update(self, requested_torque_Nm, motor_kt):
 
-        # // retrieve info from sim 
-        torque_command_Nm = sim.torque_command_Nm[i]
-        motor_speed_rad_s = sim.motor_speed_rad_s[i]
-        motor_kt = sim.motor.kt # // Chat said something about Id/Iq control table
+        # // Current calculation
+        requested_current_a = requested_torque_Nm / motor_kt
 
-        # // current command calculation
-        requested_motor_current_a = torque_command_Nm / motor_kt
-        motor_current_a = max(
+        # // limit 
+        self.current_a = max(
             -self.max_current_a,
-            min(self.max_current_a, requested_motor_current_a)
+            min(self.max_current_a, requested_current_a)
         )
 
-        achievable_torque_Nm = motor_current_a * motor_kt
+        return self.current_a
 
-        mechanical_power_W = achievable_torque_Nm * motor_speed_rad_s
+    def has_overcurrent_fault(self):
+        if abs(self.current_a) > self.con_current_a:
+            raise ValueError(
+                f"Inverter overcurrent fault: {self.current_a} A exceeds {self.con_current_a} A"
+            )
 
-        # // todo: efficiency if we're doing that
+        return False
 
-        # // update sim
-        sim.achievable_torque_Nm[i] = achievable_torque_Nm
-        sim.inverter_current_a[i] = current_a
-        sim.requested_power_W[i] = mechanical_power_W
-
-    # // clamp
-
-    def has_overcurrent_fault(self, i, sim):
-        return abs(sim.inverter_current_a[i]) > self.con_current_a
-
-    def has_overvoltage_fault(self, i, sim):
-        return sim.terminal_voltage_V[i] > self.max_dc_voltage_v
-
-    # // Bhuv if you're reading this then hop on arc raiders, also I need BMS current limit

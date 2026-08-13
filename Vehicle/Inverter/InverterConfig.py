@@ -19,10 +19,5 @@ class InverterConfig: #TODO:
         return self.current_a
 
     def has_overcurrent_fault(self):
-        if abs(self.current_a) > self.con_current_a:
-            raise ValueError(
-                f"Inverter overcurrent fault: {self.current_a} A exceeds {self.con_current_a} A"
-            )
-
-        return False
+        return abs(self.current_a) > self.con_current_a
 

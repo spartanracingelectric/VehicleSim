@@ -110,16 +110,18 @@ class Battery:
         self.voltage_history_V = [self.terminal_voltage_V]
         self.power_history_W = [self.terminal_power_W]
 
-    def update(self, power_W, dt):
+    def update(self, current_A, dt):
         if dt <= 0:
             raise ValueError("Time step must be positive")
 
         self.open_circuit_voltage_V = (
             self.interpolate(self.soc) * self.series_cells
         )
-        self.current_A = self.currentForPower(
-            power_W, self.open_circuit_voltage_V
-        )
+        # Current comes from whatever is drawing from or charging the battery.
+        # self.current_A = self.currentForPower(
+        #     power_W, self.open_circuit_voltage_V
+        # )
+        self.current_A = current_A
         self.terminal_voltage_V = (
             self.open_circuit_voltage_V
             - self.current_A * self.internal_resistance_ohm

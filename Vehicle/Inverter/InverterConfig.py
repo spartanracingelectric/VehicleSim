@@ -1,6 +1,5 @@
 class InverterConfig: #TODO: # // don't let longGPT cook this shit alone PLS 
     def __init__(self, mass_kg, max_current_a, con_current_a, max_dc_voltage_v):
-        #// self.mass_kg = mass_kg                        # // saw this in battery code, idk what it's used for
         self.max_current_a = max_current_a                # // peak current
         self.con_current_a = con_current_a                # // continuous current
         self.max_dc_voltage_v = max_dc_voltage_v          # // max dc input
@@ -38,4 +37,4 @@ class InverterConfig: #TODO: # // don't let longGPT cook this shit alone PLS
     def has_overvoltage_fault(self, i, sim):
         return sim.terminal_voltage_V[i] > self.max_dc_voltage_v
 
-    # // Bhuv if you're reading this then hop on arc raiders, also I need BMS current limit
+    # TODO: "Bhuv if you're reading this then hop on arc raiders, also I need BMS current limit"

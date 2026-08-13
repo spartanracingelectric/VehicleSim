@@ -5,8 +5,8 @@ class MotorConfig: #TODO: Add parameters related to motor
         self.Kt = Kt #torque constant
         self.peakCurrent_A = peakCurrent_A
         self.peakTorque_Nm = peakTorque_Nm
-        self.peak_power_W = 124000
-        self.max_rpm = 6500
+        self.peak_power_W = peak_power_W
+        self.max_rpm = max_rpm
         
     def calculate_torque(self, inverter_current_A, rpm):
         current_A = max(-self.peakCurrent_A, min(inverter_current_A, self.peakCurrent_A))

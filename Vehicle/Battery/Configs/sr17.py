@@ -20,6 +20,11 @@ cell_voltage_offsets_mV = [0.0] * series_cells
 temperature_offsets_C = [0.0] * (num_modules * thermistors_per_module)
 hv_sense_offset_V = 0.0
 
+# starting state
+initial_soc = 1.0
+initial_temp_C = 25.0
+ambient_temp_C = 25.0
+
 test_data = [
     (0.000, 2.810),
     (0.008, 2.840),
@@ -113,7 +118,7 @@ test_data = [
     (1.000, 4.040),
 ]
 
-battery1 = Battery(
+sr17 = Battery(
     mass_kg=50.8,
     series_cells=series_cells,
     parallel_cells=parallel_cells,
@@ -133,4 +138,7 @@ battery1 = Battery(
     cell_voltage_offsets_mV=cell_voltage_offsets_mV,
     temperature_offsets_C=temperature_offsets_C,
     hv_sense_offset_V=hv_sense_offset_V,
+    initial_soc=initial_soc,
+    initial_temp_C=initial_temp_C,
+    ambient_temp_C=ambient_temp_C,
 )

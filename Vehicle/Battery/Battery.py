@@ -21,6 +21,10 @@ class Battery:
         cell_voltage_offsets_mV=None,
         temperature_offsets_C=None,
         hv_sense_offset_V=0.0,
+        *,
+        initial_soc,
+        initial_temp_C,
+        ambient_temp_C,
     ):
         self.mass_kg = mass_kg
         self.series_cells = series_cells
@@ -35,6 +39,9 @@ class Battery:
         self.cells_per_module = cells_per_module
         self.thermistors_per_module = thermistors_per_module
         self.hv_sense_offset_V = hv_sense_offset_V
+        self.initial_soc = initial_soc
+        self.initial_temp_C = initial_temp_C
+        self.ambient_temp_C = ambient_temp_C
 
         if num_modules * cells_per_module != series_cells:
             raise ValueError("Module cell count does not match series cell count")
@@ -70,43 +77,81 @@ class Battery:
         self.min_voltage_v = series_cells * self.ocv_cell_voltage_v[0]
         self.max_voltage_v = series_cells * self.ocv_cell_voltage_v[-1]
 
-    def batteryCalc(self, i, sim):
-        dt = sim.time_s[i + 1] - sim.time_s[i]
-        cell_voltage = self.interpolate(sim.soc[i])
-        sim.open_circuit_voltage_V[i] = cell_voltage * self.series_cells
+        self.reset()
 
-        sim.current_A[i] = self.currentForPower(
-            sim.requested_power_W[i], sim.open_circuit_voltage_V[i]
-        )
+    def reset(self, initial_soc=None, initial_temp_C=None, ambient_temp_C=None):
+        if initial_soc is None:
+            initial_soc = self.initial_soc
+        if initial_temp_C is None:
+            initial_temp_C = self.initial_temp_C
+        if ambient_temp_C is None:
+            ambient_temp_C = self.ambient_temp_C
 
-        sim.terminal_voltage_V[i] = (
-            sim.open_circuit_voltage_V[i]
-            - sim.current_A[i] * self.internal_resistance_ohm
-        )
-        sim.terminal_power_W[i] = sim.terminal_voltage_V[i] * sim.current_A[i]
-        sim.heat_W[i] = sim.current_A[i] ** 2 * self.internal_resistance_ohm
+        if initial_soc < 0 or initial_soc > 1:
+            raise ValueError("SOC must be between 0 and 1")
 
-        used_ah = sim.current_A[i] * dt / 3600
-        sim.soc[i + 1] = sim.soc[i] - used_ah / self.capacity_ah
-        if sim.soc[i + 1] < 0 or sim.soc[i + 1] > 1:
-            raise ValueError("Battery ran out of charge")
+        self.soc = initial_soc
+        self.temp_C = initial_temp_C
+        self.ambient_temp_C = ambient_temp_C
+        self.elapsed_time_s = 0.0
+        self.current_A = 0.0
+        self.open_circuit_voltage_V = self.interpolate(self.soc) * self.series_cells
+        self.terminal_voltage_V = self.open_circuit_voltage_V
+        self.terminal_power_W = 0.0
+        self.heat_W = 0.0
+        self.discharged_energy_kWh = 0.0
+        self.charged_energy_kWh = 0.0
+        self.shunt_coulomb_count_C = 0.0
 
-        sim.temp_C[i + 1] = self.temperatureCalc(
-            sim.temp_C[i], sim.heat_W[i], dt, sim.ambient_temp_C
-        )
+        self.time_s = [0.0]
+        self.soc_history = [self.soc]
+        self.temp_history_C = [self.temp_C]
+        self.current_history_A = [self.current_A]
+        self.voltage_history_V = [self.terminal_voltage_V]
+        self.power_history_W = [self.terminal_power_W]
 
-        energy = sim.terminal_power_W[i] * dt / 3_600_000
-        sim.discharged_energy_kWh[i + 1] = (
-            sim.discharged_energy_kWh[i] + max(energy, 0)
-        )
-        sim.charged_energy_kWh[i + 1] = (
-            sim.charged_energy_kWh[i] + max(-energy, 0)
-        )
-        sim.shunt_coulomb_count_C[i + 1] = (
-            sim.shunt_coulomb_count_C[i] + sim.current_A[i] * dt
-        )
+    def update(self, power_W, dt):
+        if dt <= 0:
+            raise ValueError("Time step must be positive")
 
-    def currentForPower(self, power_W, voltage_V):
+        self.open_circuit_voltage_V = (
+            self.interpolate(self.soc) * self.series_cells
+        )
+        self.current_A = self.currentForPower(
+            power_W, self.open_circuit_voltage_V
+        )
+        self.terminal_voltage_V = (
+            self.open_circuit_voltage_V
+            - self.current_A * self.internal_resistance_ohm
+        )
+        self.terminal_power_W = self.terminal_voltage_V * self.current_A
+        self.heat_W = self.current_A**2 * self.internal_resistance_ohm
+
+        used_ah = self.current_A * dt / 3600
+        next_soc = self.soc - used_ah / self.capacity_ah
+        if next_soc < 0 or next_soc > 1:
+            raise ValueError("Battery SOC went outside the modeled range")
+        self.soc = next_soc
+
+        self.temp_C = self.temperatureCalc(self.heat_W, dt)
+
+        energy = self.terminal_power_W * dt / 3_600_000
+        self.discharged_energy_kWh += max(energy, 0)
+        self.charged_energy_kWh += max(-energy, 0)
+        self.shunt_coulomb_count_C += self.current_A * dt
+        self.elapsed_time_s += dt
+
+        self.time_s.append(self.elapsed_time_s)
+        self.soc_history.append(self.soc)
+        self.temp_history_C.append(self.temp_C)
+        self.current_history_A.append(self.current_A)
+        self.voltage_history_V.append(self.terminal_voltage_V)
+        self.power_history_W.append(self.terminal_power_W)
+
+    def currentForPower(self, power_W, voltage_V=None):
+        if voltage_V is None:
+            voltage_V = self.open_circuit_voltage_V
+
         d = voltage_V**2 - 4 * self.internal_resistance_ohm * power_W
         if d < 0:
             raise ValueError("Battery cannot supply that much power")
@@ -125,22 +170,21 @@ class Battery:
                 )
         return self.ocv_cell_voltage_v[-1]
 
-    def temperatureCalc(self, temp_C, heat_W, dt, ambient_C):
+    def temperatureCalc(self, heat_W, dt):
         if self.thermal_resistance_kpw is None:
-            return temp_C + heat_W * dt / self.heat_capacity_jpk
+            return self.temp_C + heat_W * dt / self.heat_capacity_jpk
 
-        final_temp = ambient_C + heat_W * self.thermal_resistance_kpw
+        final_temp = (
+            self.ambient_temp_C + heat_W * self.thermal_resistance_kpw
+        )
         time_constant = self.thermal_resistance_kpw * self.heat_capacity_jpk
-        return final_temp + (temp_C - final_temp) * math.exp(
+        return final_temp + (self.temp_C - final_temp) * math.exp(
             -dt / time_constant
         )
 
-    # BMS stuff.
-    def getCellVoltages_mV(self, sim, i=None):
-        if i is None:
-            i = len(sim.time_s) - 2
-
-        cell_voltage_V = sim.terminal_voltage_V[i] / self.series_cells
+    # Battery sensor values used by the BMS model.
+    def getCellVoltages_mV(self):
+        cell_voltage_V = self.terminal_voltage_V / self.series_cells
         voltages = []
         for cell in range(self.series_cells):
             voltage_mV = cell_voltage_V * 1000
@@ -148,20 +192,16 @@ class Battery:
             voltages.append(round(voltage_mV))
         return voltages
 
-    def getTemperatures_C(self, sim, i=None):
-        if i is None:
-            i = len(sim.time_s) - 2
-
+    def getTemperatures_C(self):
         temperatures = []
-        temp_C = sim.temp_C[i + 1]
         for thermistor in range(len(self.temperature_offsets_C)):
-            temperature = temp_C + self.temperature_offsets_C[thermistor]
+            temperature = self.temp_C + self.temperature_offsets_C[thermistor]
             temperatures.append(int(temperature))
         return temperatures
 
-    def getModuleData(self, sim, i=None):
-        cell_voltages = self.getCellVoltages_mV(sim, i)
-        temperatures = self.getTemperatures_C(sim, i)
+    def getModuleData(self):
+        cell_voltages = self.getCellVoltages_mV()
+        temperatures = self.getTemperatures_C()
         modules = []
 
         for module in range(self.num_modules):
@@ -175,22 +215,15 @@ class Battery:
             })
         return modules
 
-    def getHvSensePackVoltage_cV(self, sim, i=None):
-        if i is None:
-            i = len(sim.time_s) - 2
-        voltage_V = sim.terminal_voltage_V[i] + self.hv_sense_offset_V
+    def getHvSensePackVoltage_cV(self):
+        voltage_V = self.terminal_voltage_V + self.hv_sense_offset_V
         return round(voltage_V * 100)
 
-    def getShuntCurrent_mA(self, sim, i=None):
-        if i is None:
-            i = len(sim.time_s) - 2
-        return round(sim.current_A[i] * 1000)
+    def getShuntCurrent_mA(self):
+        return round(self.current_A * 1000)
 
-    def getBMSInputs(self, sim, i=None):
-        if i is None:
-            i = len(sim.time_s) - 2
-
-        modules = self.getModuleData(sim, i)
+    def getBMSInputs(self):
+        modules = self.getModuleData()
         cell_voltages = []
         for module in modules:
             cell_voltages.extend(module["cellVoltage_mV"])
@@ -198,7 +231,7 @@ class Battery:
         return {
             "moduleData": modules,
             "sumPackVoltage_cV": round(sum(cell_voltages) / 10),
-            "hvSensePackVoltage_cV": self.getHvSensePackVoltage_cV(sim, i),
-            "shuntCurrent_mA": self.getShuntCurrent_mA(sim, i),
-            "shuntCoulombCount_C": sim.shunt_coulomb_count_C[i + 1],
+            "hvSensePackVoltage_cV": self.getHvSensePackVoltage_cV(),
+            "shuntCurrent_mA": self.getShuntCurrent_mA(),
+            "shuntCoulombCount_C": self.shunt_coulomb_count_C,
         }

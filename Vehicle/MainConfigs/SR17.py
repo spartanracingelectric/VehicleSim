@@ -10,14 +10,14 @@ inverterConfigs = loadConfigs("Vehicle.Inverter.Configs")
 motorConfigs = loadConfigs("Vehicle.Motor.Configs")
 tireConfigs = loadConfigs("Vehicle.Tire.Configs")
 
-SR16 = VehicleConfig(
+SR17 = VehicleConfig(
     vehicle_mass_kg=204.1,
-    battery=batteryConfigs.battery1,
+    battery=batteryConfigs.sr17,
     axel=axelConfigs.axel1,
     bms=bmsConfigs.bms1,
     brake=brakeConfigs.brake1,
     driver=driverConfigs.driver1,
     inverter=inverterConfigs.inverter1,
-    motor=motorConfigs.motor1,
+    motor=motorConfigs.emrax228_mv,
     tire=tireConfigs.tire1,
 )

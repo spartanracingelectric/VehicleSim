@@ -2,14 +2,14 @@
 import matplotlib.pyplot as plt
 
 
-def plot_energy_mass(sim):
-    print(sim.total_power_KwHr)
-    print(sim.battery_mass_type)
-
-    plt.plot(sim.battery_mass_type, sim.total_power_KwHr, marker="o")
-    plt.xlabel("Battery mass (kg)")
-    plt.ylabel("Energy (kWh)")
-    plt.title("Energy vs battery mass")
+def plot(xlist: list, ylist: list, xlabel: str, ylabel: str, title: str):
+    print(xlist)
+    print(ylist)
+    
+    plt.plot(xlist, ylist, marker="o")
+    plt.xlabel("xlabel")
+    plt.ylabel("ylabel")
+    plt.title("title")
     plt.grid(True)
     plt.show()
 
@@ -19,5 +19,3 @@ def plot_energy_mass(sim):
 
 
 #TODO: show all plots
-def plot_all(sim):
-    plot_energy_mass(sim)

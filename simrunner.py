@@ -1,6 +1,6 @@
 import numpy as np
 from Functions.loadConfigs import loadConfigs
-from Vehicle.MainConfigs.SR16 import SR16
+from Vehicle.MainConfigs.SR17 import SR17
 from Data.csvParser import load_speed_trace
 from Data.plot import plot
 
@@ -11,7 +11,8 @@ NUM_LAPS = 1
 class SimRunner:
     def __init__(self, vehicle, csv_path=TRACE_CSV):
         self.vehicle = vehicle
-        self.time_s, self.vel_mps = load_speed_trace(csv_path)
+        # self.time_s, self.vel_mps = load_speed_trace(csv_path)
+        self.time_s = np.arange(0, 100, 1)
         self.dt_s = float(np.mean(np.diff(self.time_s)))
         self.accel_mps2 = np.zeros(len(self.time_s))
         self.force_N = np.zeros(len(self.time_s))
@@ -19,7 +20,7 @@ class SimRunner:
         self.power_W = np.zeros(len(self.time_s))
         
 def main():
-    sim = SimRunner(SR16)
+    sim = SimRunner(SR17)
     run(sim)
     plot(sim)
 

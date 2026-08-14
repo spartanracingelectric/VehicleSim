@@ -1,5 +1,3 @@
-from Vehicle.Battery.Battery import Battery
-
 class BMSConfig:
     def __init__(self, max_cell_voltage_threshold_mV : float, min_cell_voltage_threshold_mV : float, max_temp_threshold_C : float, min_temp_threshold_C : float, max_power_threshold_kW : float):
         self.max_cell_voltage_threshold_mV = max_cell_voltage_threshold_mV;
@@ -23,10 +21,10 @@ class BMSConfig:
         self.min_temperature_C = 0.0
         self.average_temperature_C = 0.0
 
-    def update(self, battery: Battery) -> None:
-        self.update_voltages(battery.getCellVoltages_mV())
-        self.update_temperatures(battery.getTemperatures_C())
-        self.update_current(battery.getShuntCurrent_mA())
+    def update(self, battery_voltages_mV: list, battery_temperatures_C: list, battery_current_mA: float) -> None:
+        self.update_voltages(battery_voltages_mV)
+        self.update_temperatures(battery_temperatures_C)
+        self.update_current(battery_current_mA)
     
     def update_voltages(self, voltages_mV : list) -> None:
         self.cell_voltages_mV = voltages_mV.copy()

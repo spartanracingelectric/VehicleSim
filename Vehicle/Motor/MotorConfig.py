@@ -8,6 +8,9 @@ class MotorConfig: #TODO: Add parameters related to motor
         self.peak_power_W = peak_power_W
         self.max_rpm = max_rpm
         
+    def update(self, inverter_current_A, rpm):
+        self.updateTorque(inverter_current_A, rpm)
+        
     def updateTorque(self, inverter_current_A, rpm):
         current_A = max(-self.peakCurrent_A, min(inverter_current_A, self.peakCurrent_A))
         torque_Nm = self.Kt * current_A
@@ -16,7 +19,10 @@ class MotorConfig: #TODO: Add parameters related to motor
         
         if velocity_rad_s > 0:
             max_torque_Nm = self.peak_power_W / velocity_rad_s
-            torque_limit = min(self.peakTorque, max_torque_Nm)
+            torque_limit = min(self.peakTorque_Nm, max_torque_Nm)
             torque_Nm = max(-torque_limit, min(torque_Nm, torque_limit))
             
         return torque_Nm
+    
+    def getMotor_kt(self):
+        return self.Kt

@@ -184,6 +184,20 @@ class Battery:
             -dt / time_constant
         )
 
+    def getPackMaxVoltage_V(self):
+        return self.interpolate(self.soc) * self.series_cells
+
+    def getPackMaxCurrent_A(self):
+        max_voltage_V = self.getPackMaxVoltage_V()
+        voltage_limited_current_A = (
+            (max_voltage_V - self.min_voltage_v)
+            / self.internal_resistance_ohm
+        )
+        return min(
+            self.max_discharge_current_a,
+            max(0.0, voltage_limited_current_A),
+        )
+
     # Battery sensor values used by the BMS model.
     def getCellVoltages_mV(self):
         cell_voltage_V = self.terminal_voltage_V / self.series_cells

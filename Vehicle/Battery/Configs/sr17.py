@@ -1,5 +1,5 @@
 from Vehicle.Battery.Cell import Cell
-from Vehicle.Battery.Pack import Pack
+from Vehicle.Battery.TractiveBatteryPack import TractiveBatteryPack
 
 
 def estimateOpenCircuitVoltage_V(
@@ -148,7 +148,7 @@ jp50p1 = Cell(
 )
 
 # sr17 battery pack
-sr17 = Pack(
+sr17 = TractiveBatteryPack(
     mass_kg=50.8,
     cell=jp50p1,
     series_cells=series_cells,

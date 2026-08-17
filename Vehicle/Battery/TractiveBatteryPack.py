@@ -3,7 +3,7 @@ import math
 from Vehicle.Battery.Cell import Cell
 
 
-class Pack:
+class TractiveBatteryPack:
     def __init__(
         self,
         mass_kg,

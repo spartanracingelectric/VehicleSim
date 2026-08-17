@@ -1,6 +1,6 @@
-from Vehicle.Battery.Pack import Pack
+from Vehicle.Battery.TractiveBatteryPack import TractiveBatteryPack
 
-battery3 = Pack(
+battery3 = TractiveBatteryPack(
     mass_kg=55.8,
     initial_soc=1.0,
     initial_temp_C=25.0,

@@ -1,15 +1,6 @@
 import math
 
 
-def estimateOpenCircuitVoltage_V(
-    loaded_voltage_V,
-    current_A,
-    internal_resistance_ohm,
-):
-    voltage_drop_V = current_A * internal_resistance_ohm
-    return loaded_voltage_V + voltage_drop_V
-
-
 class Cell:
     def __init__(
         self,
@@ -82,12 +73,12 @@ class Cell:
     def getHeat_W(self, current_A):
         return current_A**2 * self.internal_resistance_ohm
 
-    def getUsedCapacity_Ah(self, current_A, dt):
+    def getUsedCapacity_Ah(self, current_A, dt_s):
         seconds_per_hour = 3600
-        return current_A * dt / seconds_per_hour
+        return current_A * dt_s / seconds_per_hour
 
-    def getNextSoc(self, soc, current_A, dt):
-        used_capacity_Ah = self.getUsedCapacity_Ah(current_A, dt)
+    def getNextSoc(self, soc, current_A, dt_s):
+        used_capacity_Ah = self.getUsedCapacity_Ah(current_A, dt_s)
         return soc - used_capacity_Ah / self.capacity_ah
 
     def getCurrentForPower_A(self, power_W, open_circuit_voltage_V):

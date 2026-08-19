@@ -26,6 +26,11 @@ class Battery:
         initial_temp_C,
         ambient_temp_C,
     ):
+        #TODO: 1. make cells object
+        #TODO: 2. add comments to variables with weird ahh names
+        #TODO: 3. change class name to tractive battery pack or TBP nomenclaturebs blame AKASH
+        #TODO: 4. make calculation different functions cuz im a dickhead
+        #TODO: 5. make arrays into numpy arrays and use numpy mtfker
         self.mass_kg = mass_kg
         self.series_cells = series_cells
         self.parallel_cells = parallel_cells

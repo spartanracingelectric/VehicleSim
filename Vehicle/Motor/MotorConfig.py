@@ -1,4 +1,5 @@
 import math
+import numpy as np
 
 class MotorConfig: #TODO: Add parameters related to motor
     def __init__(self, Kt, peakCurrent_A, peakTorque_Nm, peak_power_W, max_rpm):
@@ -12,15 +13,15 @@ class MotorConfig: #TODO: Add parameters related to motor
         self.updateTorque(inverter_current_A, rpm)
         
     def updateTorque(self, inverter_current_A, rpm):
-        current_A = max(-self.peakCurrent_A, min(inverter_current_A, self.peakCurrent_A))
+        current_A = np.clip(inverter_current_A, -self.peakCurrent_A, self.peakCurrent_A)
         torque_Nm = self.Kt * current_A
-        torque_Nm = max(-self.peakTorque_Nm, min(torque_Nm, self.peakTorque_Nm))
+        torque_Nm = np.clip(torque_Nm, -self.peakTorque_Nm, self.peakTorque_Nm)
         velocity_rad_s = abs(rpm) * 2.0 * math.pi / 60.0
         
         if velocity_rad_s > 0:
             max_torque_Nm = self.peak_power_W / velocity_rad_s
             torque_limit = min(self.peakTorque_Nm, max_torque_Nm)
-            torque_Nm = max(-torque_limit, min(torque_Nm, torque_limit))
+            torque_Nm = np.clip(torque_Nm, -torque_limit, torque_limit)
             
         return torque_Nm
     

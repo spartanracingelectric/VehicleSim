@@ -8,7 +8,7 @@ from simrunner import SimRunner
 batteryConfigs = loadConfigs("Vehicle.Battery.Configs")
 TRACE_CSV = "Data/autox80kwh.csv"
 NUM_LAPS = 1
-VCU_commanded_torque_Nm = 231
+VCU_commanded_torque_Nm = 231 #TODO: dont hardcode this dumbahh
 RPM = 1000
 
 def main():
@@ -18,7 +18,7 @@ def main():
     # per-cell snapshot (len ≈ series_cells), not vs time.
     plot(
         sim.vehicle.battery.time_s,
-        sim.vehicle.battery.soc_history,
+        sim.vehicle.battery.current_history_A,
         "Time (s)",
         "SOC (V)",
         "SOC vs Time",

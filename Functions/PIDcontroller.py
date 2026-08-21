@@ -13,6 +13,7 @@ class PIDcontroller:
         self.integral = 0
         self.derivative = 0
         self.output = 0
+        self.antiWindupFlag = False
 
     def updateGainValues(self, Kp, Ki, Kd):
         self.Kp = Kp

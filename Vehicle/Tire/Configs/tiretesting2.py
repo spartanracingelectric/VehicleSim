@@ -13,10 +13,10 @@ from Vehicle.Tire.TireConfig2 import TireConfig
 #16" longitudinal tire behavior extrapolated from 20" & 18" R20 behavior
 
 tire1 = TireConfig(
-    radius_m = 0.4064,
+    radius_m = 0.2032,
     c_long = 25.691, #cornering stiffness N/rad divided by normal load
     c_lat = 33.959, #longitudinal stiffnes N/rad divided by normal load
-    tiremu = 1.5
+    tiremu = 1.2
 )
 kappa, alpha = tire1.calculateslip(
     Vx = 25, #vehicle speed 25 m/s

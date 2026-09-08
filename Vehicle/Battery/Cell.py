@@ -1,3 +1,4 @@
+import bisect
 import math
 
 
@@ -40,16 +41,18 @@ class Cell:
         if soc < 0 or soc > 1:
             raise ValueError("SOC must be between 0 and 1")
 
-        for i in range(len(self.ocv_soc) - 1):
-            if soc <= self.ocv_soc[i + 1]:
-                return self.interpolateVoltage(
-                    soc,
-                    self.ocv_soc[i],
-                    self.ocv_soc[i + 1],
-                    self.ocv_voltage_v[i],
-                    self.ocv_voltage_v[i + 1],
-                )
-        return self.ocv_voltage_v[-1]
+        if soc == 1:
+            return self.ocv_voltage_v[-1]
+
+        i = bisect.bisect_right(self.ocv_soc, soc) - 1
+        i = max(i, 0)
+        return self.interpolateVoltage(
+            soc,
+            self.ocv_soc[i],
+            self.ocv_soc[i + 1],
+            self.ocv_voltage_v[i],
+            self.ocv_voltage_v[i + 1],
+        )
 
     def interpolateVoltage(
         self,

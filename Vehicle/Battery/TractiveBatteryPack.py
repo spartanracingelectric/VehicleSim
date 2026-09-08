@@ -206,6 +206,68 @@ class TractiveBatteryPack:
         self.voltage_history_V.append(self.terminal_voltage_V)
         self.power_history_W.append(self.terminal_power_W)
 
+    def advanceConstantCurrent(self, current_A, duration_s):
+        if duration_s <= 0:
+            raise ValueError("Duration must be positive")
+
+        start_soc = self.soc
+        end_soc = self.getNextSoc(current_A, duration_s)
+        if not 0 <= end_soc <= 1:
+            raise ValueError("Pack SOC went outside the modeled range")
+
+        heat_W = self.getPackHeat_W(current_A)
+        end_temp_C = self.getTemperatureAfterStep_C(heat_W, duration_s)
+        average_voltage_V = (
+            self.getAverageCellVoltage_V(start_soc, end_soc)
+            * self.series_cells
+            - current_A * self.internal_resistance_ohm
+        )
+        energy_kWh = self.getEnergyForStep_kWh(
+            average_voltage_V * current_A,
+            duration_s,
+        )
+
+        self.soc = end_soc
+        self.temp_C = end_temp_C
+        self.elapsed_time_s += duration_s
+        self.current_A = current_A
+        self.open_circuit_voltage_V = self.getPackOpenCircuitVoltage_V()
+        self.terminal_voltage_V = self.getPackTerminalVoltage_V(current_A)
+        self.terminal_power_W = self.getPackPower_W(
+            self.terminal_voltage_V,
+            current_A,
+        )
+        self.heat_W = heat_W
+        self.discharged_energy_kWh += max(energy_kWh, 0.0)
+        self.charged_energy_kWh += max(-energy_kWh, 0.0)
+        self.shunt_coulomb_count_C += current_A * duration_s
+
+        self.time_s.append(self.elapsed_time_s)
+        self.soc_history.append(self.soc)
+        self.temp_history_C.append(self.temp_C)
+        self.current_history_A.append(self.current_A)
+        self.voltage_history_V.append(self.terminal_voltage_V)
+        self.power_history_W.append(self.terminal_power_W)
+
+    def getAverageCellVoltage_V(self, start_soc, end_soc):
+        if start_soc == end_soc:
+            return self.cell.getOpenCircuitVoltage_V(start_soc)
+
+        low_soc, high_soc = sorted((start_soc, end_soc))
+        points = [low_soc]
+        points += [
+            soc for soc in self.cell.ocv_soc
+            if low_soc < soc < high_soc
+        ]
+        points.append(high_soc)
+
+        area = 0.0
+        for left, right in zip(points, points[1:]):
+            left_V = self.cell.getOpenCircuitVoltage_V(left)
+            right_V = self.cell.getOpenCircuitVoltage_V(right)
+            area += (left_V + right_V) * (right - left) / 2
+        return area / (high_soc - low_soc)
+
     # gets current through one cell
     def getCellCurrent_A(self, pack_current_A):
         return pack_current_A / self.parallel_cells

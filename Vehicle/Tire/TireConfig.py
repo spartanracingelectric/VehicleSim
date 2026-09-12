@@ -33,6 +33,27 @@ class TireConfig: #TODO: Add parameters related to tire
         tireLateralForce = (self.lateral_stiffness * slip_angle) / (1 + slip_angle) if self.lateral_stiffness and slip_angle != -1 else 0.0
         return tireLateralForce
 
+    def calculateTireTorque(self, distanceFromCenterOfMassMetersX, distanceFromCenterOfMassMetersY, tireLongitudinalForce, tireLateralForce):
+        # Torque = Force * Distance from center of mass
+        # Ensure you are using the correct distances and forces for the torque calculation. 
+        # The torque is calculated based on the forces acting on each tire and their respective 
+        # distances from the vehicle's center of mass, so each tire's contribution to the overall torque is considered.
+        tireTorque = distanceFromCenterOfMassMetersX * tireLateralForce - distanceFromCenterOfMassMetersY * tireLongitudinalForce
+
+        return tireTorque
+    # Note to self: i think this is 2d stuff do i need to include any 3d coordinates?
+
+    def calculateTireTotalTorque(self, dict_of_tire_torques):
+        # Sum the torques from all tires to get the total torque on the vehicle
+        totalTorque = sum(dict_of_tire_torques.values())
+        return totalTorque
+
+    def calculateTireTotalForce(self, dict_of_tire_forces):
+        # Sum the forces from all tires to get the total force on the vehicle
+        totalForce = sum(dict_of_tire_forces.values())
+        return totalForce
+
+    
     
 
     

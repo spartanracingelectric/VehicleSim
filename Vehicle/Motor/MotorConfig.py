@@ -15,6 +15,13 @@ class MotorConfig: #TODO: Add parameters related to motor
         self.Ld = Ld #direct axis inductance (mH)
         self.Jm = Jm #inertia (kgcm^2??)
 
+        # initialize to 0 at beginning
+        self.id = 0
+        self.iq = 0
+        self.wm = 0
+        self.theta_m = 0
+
+
     # update the motor’s state using the current and speed
     # recieve vd and vq from inverter
     def update(self, vd, vq):
@@ -24,11 +31,12 @@ class MotorConfig: #TODO: Add parameters related to motor
     def find_we(self, old_wm):
          # (Np/2) number of pole pairs
         return (self.Np/2)*old_wm
-    
-    def update_id(self, vd, old_id, we, old_iq):
+
+    # uses old id, old iq
+    def update_id(self, vd, we, delta_t):
         # find did/dt then update id
-        
-        pass
+        did_dt = (vd - (self.Rs * self.id) + (we * self.Lq * self.iq)) / self.Ld
+        self.id = self.id + did_dt*delta_t
 
     
     def update_iq(self, vq, old_iq, we, old_id, lambda_f):

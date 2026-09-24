@@ -1,5 +1,6 @@
 from Vehicle.Motor.MotorConfig import MotorConfig
 
+# old constants
 emrax228_mv = MotorConfig(
     Kt=0.64,
     peakCurrent_A=360,
@@ -8,6 +9,7 @@ emrax228_mv = MotorConfig(
     max_rpm=6500
 )
 
+# new constants
 amk_dd5 = MotorConfig(
     Kt = 0.26,
     peakCurrent_A = 105,

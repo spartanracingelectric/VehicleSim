@@ -38,10 +38,11 @@ class MotorConfig: #TODO: Add parameters related to motor
         did_dt = (vd - (self.Rs * self.id) + (we * self.Lq * self.iq)) / self.Ld
         self.id = self.id + did_dt*delta_t
 
-    
-    def update_iq(self, vq, old_iq, we, old_id, lambda_f):
-         # find diq/dt then update iq
-        pass
+    # uses old id, old iq
+    def update_iq(self, vq, we, lambda_f, delta_t):
+        # find diq/dt then update iq
+        diq_dt = (vq - self.Rs * self.iq - we * (self.Ld * self.id + lambda_f)) / self.Lq
+        self.iq = self.iq + diq_dt*delta_t
 
 
     def find_Te(self, lambda_f, updated_iq, updated_id):
@@ -49,7 +50,7 @@ class MotorConfig: #TODO: Add parameters related to motor
 
 
     def update_wm(self, Te, T_load, Bm, old_wm, T_friction):
-        pass
+        wm = (Te - T_load - Bm * old_wm - T_friction) / self.Jm
 
 
 

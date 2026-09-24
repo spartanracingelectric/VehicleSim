@@ -26,6 +26,13 @@ class MotorConfig: #TODO: Add parameters related to motor
     # recieve vd and vq from inverter
     def update(self, vd, vq):
         #self.updateTorque(inverter_current_A, rpm)
+        we = self.find_we(self.wm);
+        self.update_id(vd, we, delta_t);
+        self.update_iq(vq, we, lambda_f, delta_t);
+        Te = self.find_Te(lambda_f);
+        self.update_theta_m(delta_t);
+
+        return self.id, self.iq, Te, self.wm, self.theta_m
         pass
 
     def find_we(self, old_wm):
@@ -33,12 +40,14 @@ class MotorConfig: #TODO: Add parameters related to motor
         return (self.Np/2)*old_wm
 
     # uses old id, old iq
+    # updates old id to new id
     def update_id(self, vd, we, delta_t):
         # find did/dt then update id
         did_dt = (vd - (self.Rs * self.id) + (we * self.Lq * self.iq)) / self.Ld
         self.id = self.id + did_dt*delta_t
 
     # uses old id, old iq
+    # updates old iq to new iq
     def update_iq(self, vq, we, lambda_f, delta_t):
         # find diq/dt then update iq
         diq_dt = (vq - self.Rs * self.iq - we * (self.Ld * self.id + lambda_f)) / self.Lq
@@ -51,11 +60,15 @@ class MotorConfig: #TODO: Add parameters related to motor
         return Te
 
 
-    def update_wm(self, Te, T_load, Bm, old_wm, T_friction):
-        wm = (Te - T_load - Bm * old_wm - T_friction) / self.Jm
-        return wm
+    def update_wm(self, Te, T_load, Bm, T_friction, delta_t):
+        dwm_dt = (Te - T_load - Bm * self.wm - T_friction) / self.Jm
+        self.wm = self.wm + dwm_dt*delta_t
 
+    def update_theta_m(self, delta_t):
+        self.theta_m = self.theta_m + (self.wm * delta_t)
 
+    def find_P_electrical():
+        pass
 
 
 

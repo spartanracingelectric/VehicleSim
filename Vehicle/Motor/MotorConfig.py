@@ -44,13 +44,16 @@ class MotorConfig: #TODO: Add parameters related to motor
         diq_dt = (vq - self.Rs * self.iq - we * (self.Ld * self.id + lambda_f)) / self.Lq
         self.iq = self.iq + diq_dt*delta_t
 
-
-    def find_Te(self, lambda_f, updated_iq, updated_id):
-        pass
+    
+    # uses updated id, updated iq
+    def find_Te(self, lambda_f):
+        Te = (1.5 * self.Np/2)* ((lambda_f * self.iq) + (self.Ld - self.Lq)*(self.id * self.iq))
+        return Te
 
 
     def update_wm(self, Te, T_load, Bm, old_wm, T_friction):
         wm = (Te - T_load - Bm * old_wm - T_friction) / self.Jm
+        return wm
 
 
 

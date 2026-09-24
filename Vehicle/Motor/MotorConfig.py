@@ -3,12 +3,17 @@ import numpy as np
 
 class MotorConfig: #TODO: Add parameters related to motor
     # init function runs automatically when you create a MotorConfig object
-    def __init__(self, Kt, peakCurrent_A, peakTorque_Nm, peak_power_W, max_rpm):
+    def __init__(self, Kt, Rs, Np, Lq, Ld, Jm):
         self.Kt = Kt #torque constant
-        self.peakCurrent_A = peakCurrent_A
-        self.peakTorque_Nm = peakTorque_Nm
-        self.peak_power_W = peak_power_W
-        self.max_rpm = max_rpm
+        # self.peakCurrent_A = peakCurrent_A
+        # self.peakTorque_Nm = peakTorque_Nm
+        # self.peak_power_W = peak_power_W
+        # self.max_rpm = max_rpm
+        self.Rs = Rs #stator winding resistance
+        self.Np = Np #number of poles
+        self.Lq = Lq #quadrature axis inductance (mH)
+        self.Ld = Ld #direct axis inductance (mH)
+        self.Jm = Jm #inertia (kgcm^2??)
 
     # update the motor’s state using the current and speed
     # recieve vd and vq from inverter
@@ -16,25 +21,26 @@ class MotorConfig: #TODO: Add parameters related to motor
         #self.updateTorque(inverter_current_A, rpm)
         pass
 
-    def find_we(self, Np, old_wm):
+    def find_we(self, old_wm):
          # (Np/2) number of pole pairs
-        return (Np/2)*old_wm
+        return (self.Np/2)*old_wm
     
-    def update_id(self, vd, Rs, old_id, we, Lq, old_iq, Ld):
+    def update_id(self, vd, old_id, we, old_iq):
         # find did/dt then update id
+        
         pass
 
     
-    def update_iq(self, vq, Rs, old_iq, we, Ld, old_id, lambda_f, Lq):
+    def update_iq(self, vq, old_iq, we, old_id, lambda_f):
          # find diq/dt then update iq
         pass
 
 
-    def find_Te(self, Np, lambda_f, updated_iq, Ld, Lq, updated_id):
+    def find_Te(self, lambda_f, updated_iq, updated_id):
         pass
 
 
-    def update_wm(self, Te, T_load, Bm, old_wm, T_friction, Jm):
+    def update_wm(self, Te, T_load, Bm, old_wm, T_friction):
         pass
 
 

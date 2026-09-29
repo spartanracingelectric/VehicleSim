@@ -3,7 +3,7 @@ import numpy as np
 
 class MotorConfig: #TODO: Add parameters related to motor
     # init function runs automatically when you create a MotorConfig object
-    def __init__(self, Kt, Rs, Np, Lq, Ld, Jm):
+    def __init__(self, Kt, Rs, Np, Lq, Ld, Jm, lambda_f):
         self.Kt = Kt #torque constant
         # self.peakCurrent_A = peakCurrent_A
         # self.peakTorque_Nm = peakTorque_Nm
@@ -14,6 +14,7 @@ class MotorConfig: #TODO: Add parameters related to motor
         self.Lq = Lq #quadrature axis inductance (mH)
         self.Ld = Ld #direct axis inductance (mH)
         self.Jm = Jm #inertia (kgcm^2??)
+        self.lambda_f = lambda_f #rotor flux linkage
 
         # initialize to 0 at beginning
         self.id = 0
@@ -23,18 +24,18 @@ class MotorConfig: #TODO: Add parameters related to motor
 
 
     # update the motor’s state using the current and speed
-    # recieve vd and vq from inverter
-    def update(self, vd, vq):
+    # recieve vd and vq from inverter, delta t from running simulation
+    def update(self, vd, vq, delta_t):
         #self.updateTorque(inverter_current_A, rpm)
         we = self.find_we(self.wm);
         self.update_id(vd, we, delta_t);
-        self.update_iq(vq, we, lambda_f, delta_t);
-        Te = self.find_Te(lambda_f);
+        self.update_iq(vq, we, delta_t);
+        Te = self.find_Te();
         self.update_theta_m(delta_t);
-        Pe = self.find_P_electrical(self);
+        Pe = self.find_P_electrical(vd, vq);
 
         return self.id, self.iq, Te, self.wm, self.theta_m, Pe
-        pass
+    
 
     def find_we(self, old_wm):
          # (Np/2) number of pole pairs
@@ -49,15 +50,15 @@ class MotorConfig: #TODO: Add parameters related to motor
 
     # uses old id, old iq
     # updates old iq to new iq
-    def update_iq(self, vq, we, lambda_f, delta_t):
+    def update_iq(self, vq, we, delta_t):
         # find diq/dt then update iq
-        diq_dt = (vq - self.Rs * self.iq - we * (self.Ld * self.id + lambda_f)) / self.Lq
+        diq_dt = (vq - self.Rs * self.iq - we * (self.Ld * self.id + self.lambda_f)) / self.Lq
         self.iq = self.iq + diq_dt*delta_t
 
     
     # uses updated id, updated iq
-    def find_Te(self, lambda_f):
-        Te = (1.5 * self.Np/2)* ((lambda_f * self.iq) + (self.Ld - self.Lq)*(self.id * self.iq))
+    def find_Te(self):
+        Te = (1.5 * self.Np/2)* ((self.lambda_f * self.iq) + (self.Ld - self.Lq)*(self.id * self.iq))
         return Te
 
 
@@ -68,8 +69,8 @@ class MotorConfig: #TODO: Add parameters related to motor
     def update_theta_m(self, delta_t):
         self.theta_m = self.theta_m + (self.wm * delta_t)
 
-    def find_P_electrical(self):
-        return 1.5 * (self.vd * self.id + self.vq * self.iq)
+    def find_P_electrical(self, vd, vq):
+        return 1.5 * (vd * self.id + vq * self.iq)
 
 
 

@@ -23,5 +23,6 @@ amk_dd5 = MotorConfig(
     Np = 10, #number of poles
     Lq = 0.00012, #quadrature axis inductance (H)
     Ld = 0.00024, #direct axis inductance (H)
-    Jm = 0.000274 #inertia (kgm^2)
+    Jm = 0.000274, #inertia (kgm^2)
+    lambda_f = 0.0245 #rotor flux linkage (Wb)
 ) 

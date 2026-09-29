@@ -25,8 +25,8 @@ class MotorConfig: #TODO: Add parameters related to motor
 
     # calculates the difference between desired and actual and return how much voltage is needed to fill in error
     # get actual from motor
-    def pi_controller(desired_id, desired_iq):
-        return desired_vd, desired_vq
+    def pi_controller(id_desired, iq_desired):
+        return vd_desired, vq_desired
     
     
     # update the motor’s state using the current and speed
@@ -97,8 +97,9 @@ class MotorConfig: #TODO: Add parameters related to motor
     def getMotor_kt(self):
         return self.Kt
 
-    ### PI CONTROLLER ------------------------
-    def getCurrentError(self):
+
+    ### PI CONTROLLER ----------------------------------------------------------
+    def getCurrentError(self, id_desired, iq_desired):
         ed = id_desired - self.id
         eq = iq_desired - self.iq
         return ed, eq

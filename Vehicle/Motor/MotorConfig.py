@@ -31,8 +31,9 @@ class MotorConfig: #TODO: Add parameters related to motor
         self.update_iq(vq, we, lambda_f, delta_t);
         Te = self.find_Te(lambda_f);
         self.update_theta_m(delta_t);
+        Pe = self.find_P_electrical(self);
 
-        return self.id, self.iq, Te, self.wm, self.theta_m
+        return self.id, self.iq, Te, self.wm, self.theta_m, Pe
         pass
 
     def find_we(self, old_wm):
@@ -67,8 +68,8 @@ class MotorConfig: #TODO: Add parameters related to motor
     def update_theta_m(self, delta_t):
         self.theta_m = self.theta_m + (self.wm * delta_t)
 
-    def find_P_electrical():
-        pass
+    def find_P_electrical(self):
+        return 1.5 * (self.vd * self.id + self.vq * self.iq)
 
 
 

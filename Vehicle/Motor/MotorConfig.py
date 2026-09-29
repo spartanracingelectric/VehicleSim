@@ -3,7 +3,7 @@ import numpy as np
 
 class MotorConfig: #TODO: Add parameters related to motor
     # init function runs automatically when you create a MotorConfig object
-    def __init__(self, Kt, Rs, Np, Lq, Ld, Jm, lambda_f):
+    def __init__(self, Kt, Rs, Np, Lq, Ld, Jm, lambda_f, Kpq, Kpd, Tnq, Tnd):
         self.Kt = Kt #torque constant
         # self.peakCurrent_A = peakCurrent_A
         # self.peakTorque_Nm = peakTorque_Nm
@@ -15,6 +15,11 @@ class MotorConfig: #TODO: Add parameters related to motor
         self.Ld = Ld #direct axis inductance (mH)
         self.Jm = Jm #inertia (kgcm^2??)
         self.lambda_f = lambda_f #rotor flux linkage
+        self.Kpq = Kpq # q-axis proportional gain (V/A)
+        self.Kpd = Kpd # d-axis proportional gain (V/A)
+        self.Tnq = Tnq # time constant (ms)
+        self.Tnd = Tnd # time constant (ms)
+
 
         # initialize to 0 at beginning
         self.id = 0

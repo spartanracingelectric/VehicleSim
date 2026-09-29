@@ -24,5 +24,12 @@ amk_dd5 = MotorConfig(
     Lq = 0.00012, #quadrature axis inductance (H)
     Ld = 0.00024, #direct axis inductance (H)
     Jm = 0.000274, #inertia (kgm^2)
-    lambda_f = 0.0245 #rotor flux linkage (Wb)
+    lambda_f = 0.0245, #rotor flux linkage (Wb)
+
+    # PI controller constants
+    Kpq = 0.64, # q-axis proportional gain (V/A)
+    Kpd = 0.58, # d-axis proportional gain (V/A)
+    Tnq = 1.2, # time constant (ms)
+    Tnd = 1.2 # time constant (ms)
+
 ) 

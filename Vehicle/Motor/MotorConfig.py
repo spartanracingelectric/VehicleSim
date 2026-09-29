@@ -71,7 +71,7 @@ class MotorConfig: #TODO: Add parameters related to motor
 
     def find_P_electrical(self, vd, vq):
         return 1.5 * (vd * self.id + vq * self.iq)
-
+    
 
 
     # # This calculates the motor torque for the current timestep
@@ -91,3 +91,10 @@ class MotorConfig: #TODO: Add parameters related to motor
     # returns motor constant, Kt
     def getMotor_kt(self):
         return self.Kt
+
+    ### PI CONTROLLER ------------------------
+    def getCurrentError(self):
+        ed = id_desired - self.id
+        eq = iq_desired - self.iq
+        return ed, eq
+

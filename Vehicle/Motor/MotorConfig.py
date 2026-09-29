@@ -23,10 +23,15 @@ class MotorConfig: #TODO: Add parameters related to motor
         self.theta_m = 0
 
 
+    # calculates the difference between desired and actual and return how much voltage is needed to fill in error
+    # get actual from motor
+    def pi_controller(desired_id, desired_iq):
+        return desired_vd, desired_vq
+    
+    
     # update the motor’s state using the current and speed
     # recieve vd and vq from inverter, delta t from running simulation
     def update(self, vd, vq, delta_t):
-        #self.updateTorque(inverter_current_A, rpm)
         we = self.find_we(self.wm);
         self.update_id(vd, we, delta_t);
         self.update_iq(vq, we, delta_t);

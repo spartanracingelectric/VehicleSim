@@ -35,6 +35,10 @@ class TheveninECM:
     a flat one from the single cell values, which is the same behaviour as
     before the tables existed.
 
+    Level 4 adds capacity SOH, resistance growth, SOC imbalance, and
+    Ah/energy throughput tracking. The aging values are externally configured
+    until real cell aging data is available.
+
     pybamm covers steps 6 to 9 of the battery timestep order.
     Steps 1 to 5 and 10 stay here because pybamm has no power limit model.
     """
@@ -48,9 +52,18 @@ class TheveninECM:
         entropic_change_vpk=0.0,
         thermal_resistance_kpw=None,
         parameter_map=None,
+        capacity_soh=1.0,
+        resistance_scale=1.0,
+        soc_imbalance=0.0,
     ):
         if cell_r1_ohm <= 0 or cell_tau_s <= 0:
             raise ValueError("RC branch values must be positive")
+        if capacity_soh <= 0 or capacity_soh > 1:
+            raise ValueError("Capacity SOH must be greater than 0 and at most 1")
+        if resistance_scale <= 0:
+            raise ValueError("Resistance scale must be positive")
+        if soc_imbalance < 0 or soc_imbalance > 1:
+            raise ValueError("SOC imbalance must be between 0 and 1")
 
         self.pack = pack
         self.cell = pack.cell
@@ -60,6 +73,14 @@ class TheveninECM:
         self.cell_r1_ohm = cell_r1_ohm
         self.cell_tau_s = cell_tau_s
         self.bus_resistance_ohm = bus_resistance_ohm
+
+        # level 4 states are externally configured because no characterized
+        # cell aging model is available yet
+        self.capacity_soh = capacity_soh
+        self.resistance_scale = resistance_scale
+        self.soc_imbalance = soc_imbalance
+        self.ah_throughput = 0.0
+        self.energy_throughput_kWh = 0.0
 
         # no dU/dT data, so reversible heat is off by default
         self.entropic_change_vpk = entropic_change_vpk
@@ -121,17 +142,27 @@ class TheveninECM:
     # gets pack series resistance
     def getPackR0_Ohm(self, soc=None, temperature_C=None):
         soc, temperature_C = self.getMapState(soc, temperature_C)
-        return self.pack_map.getR0_Ohm(soc, temperature_C)
+        return (
+            self.pack_map.getR0_Ohm(soc, temperature_C)
+            * self.resistance_scale
+        )
 
     # gets pack polarization resistance
     def getPackR1_Ohm(self, soc=None, temperature_C=None):
         soc, temperature_C = self.getMapState(soc, temperature_C)
-        return self.pack_map.getR1_Ohm(soc, temperature_C)
+        return (
+            self.pack_map.getR1_Ohm(soc, temperature_C)
+            * self.resistance_scale
+        )
 
     # gets pack polarization capacitance, chosen so the time constant is kept
     def getPackC1_F(self, soc=None, temperature_C=None):
         soc, temperature_C = self.getMapState(soc, temperature_C)
-        return self.pack_map.getC1_F(soc, temperature_C)
+        # Keep the fitted tau map unchanged as R1 grows.
+        return (
+            self.pack_map.getC1_F(soc, temperature_C)
+            / self.resistance_scale
+        )
 
     # gets the rc time constant
     def getTau_s(self, soc=None, temperature_C=None):
@@ -141,6 +172,16 @@ class TheveninECM:
     # gets pack capacity seen by the soc integrator
     def getPackCapacity_Ah(self):
         return self.parallel_cells * self.cell.capacity_ah
+
+    # gets the currently available capacity after externally supplied fade
+    def getEffectivePackCapacity_Ah(self):
+        return self.getPackCapacity_Ah() * self.capacity_soh
+
+    # estimates the weakest and strongest series-cell SOC without simulating
+    # every physical cell; soc_imbalance is the deviation on either side
+    def updateCellSocEstimates(self):
+        self.min_cell_soc = max(0.0, self.soc - self.soc_imbalance)
+        self.max_cell_soc = min(1.0, self.soc + self.soc_imbalance)
 
     # gets pack voltage with no current flowing
     def getPackOpenCircuitVoltage_V(self, soc):
@@ -159,7 +200,7 @@ class TheveninECM:
     # builds one pybamm lookup over the pack tables
     # pybamm calls these with temperature in degC, current in amps and
     # soc from 0 to 1, and only temperature and soc are used
-    def buildLookup(self, grid, name):
+    def buildLookup(self, grid, name, resistance_scale_power=0):
         soc_breakpoints = self.pack_map.soc_breakpoints
         temperature_breakpoints_C = self.pack_map.temperature_breakpoints_C
 
@@ -174,12 +215,17 @@ class TheveninECM:
                 pybamm.maximum(soc, soc_breakpoints[0]),
                 soc_breakpoints[-1],
             )
-            return pybamm.Interpolant(
+            value = pybamm.Interpolant(
                 [temperature_breakpoints_C, soc_breakpoints],
                 grid,
                 [clamped_temperature_C, clamped_soc],
                 name=name,
             )
+            if resistance_scale_power:
+                value *= pybamm.InputParameter("resistance_scale") ** (
+                    resistance_scale_power
+                )
+            return value
 
         return lookup
 
@@ -202,7 +248,9 @@ class TheveninECM:
                     soc,
                     name="pack ocv",
                 ),
-                "Cell capacity [A.h]": self.getPackCapacity_Ah(),
+                "Cell capacity [A.h]": pybamm.InputParameter(
+                    "effective_capacity_Ah"
+                ),
                 "Nominal cell capacity [A.h]": self.getPackCapacity_Ah(),
                 "Upper voltage cut-off [V]": (
                     self.cell.max_voltage_v * self.series_cells
@@ -213,14 +261,17 @@ class TheveninECM:
                 "R0 [Ohm]": self.buildLookup(
                     self.pack_map.r0_ohm,
                     "pack r0",
+                    resistance_scale_power=1,
                 ),
                 "R1 [Ohm]": self.buildLookup(
                     self.pack_map.r1_ohm,
                     "pack r1",
+                    resistance_scale_power=1,
                 ),
                 "C1 [F]": self.buildLookup(
                     self.pack_map.tau_s / self.pack_map.r1_ohm,
                     "pack c1",
+                    resistance_scale_power=-1,
                 ),
                 "Element-1 initial overpotential [V]": 0.0,
                 "Entropic change [V/K]": self.entropic_change_vpk,
@@ -235,6 +286,8 @@ class TheveninECM:
             },
             check_already_exists=False,
         )
+        # add a separate coolant state only after coolant thermal mass
+        # and heat-transfer parameters have been characterized.
         return parameter_values
 
     # resets the model state
@@ -268,6 +321,7 @@ class TheveninECM:
 
         self.elapsed_time_s = 0.0
         self.soc = started_soc
+        self.updateCellSocEstimates()
         self.temp_C = initial_temp_C
         self.ambient_temp_C = ambient_temp_C
         self.polarization_voltage_V = 0.0
@@ -285,7 +339,9 @@ class TheveninECM:
     # step 3 of the timestep order
     # gets the most power the pack can give out right now
     def getDischargeLimit_W(self):
-        cell_current_A = self.cell.getMaxDischargeCurrent_A(self.soc)
+        cell_current_A = self.cell.getMaxDischargeCurrent_A(
+            self.min_cell_soc
+        )
         current_A = cell_current_A * self.parallel_cells
         voltage_V = (
             self.open_circuit_voltage_V
@@ -297,12 +353,19 @@ class TheveninECM:
     # gets the most power the pack can take in right now
     def getChargeLimit_W(self):
         max_voltage_V = self.cell.max_voltage_v * self.series_cells
+        worst_case_open_circuit_voltage_V = (
+            self.getPackOpenCircuitVoltage_V(self.max_cell_soc)
+        )
         headroom_V = max_voltage_V - (
-            self.open_circuit_voltage_V - self.polarization_voltage_V
+            worst_case_open_circuit_voltage_V
+            - self.polarization_voltage_V
         )
         current_A = max(0.0, headroom_V / self.getPackR0_Ohm())
         current_A = min(current_A, self.pack.max_discharge_current_a)
         return max(0.0, max_voltage_V * current_A)
+
+    # replace the calculated limits with separate empirical charge and
+    # discharge maps when characterized SOC/temperature data is available.
 
     # step 5 of the timestep order
     # clamps requested power to the limits
@@ -328,7 +391,11 @@ class TheveninECM:
         # steps 6 to 9 are solved by pybamm
         self.solution = self.simulation.step(
             dt_s,
-            inputs={"power": power_W},
+            inputs={
+                "power": power_W,
+                "effective_capacity_Ah": self.getEffectivePackCapacity_Ah(),
+                "resistance_scale": self.resistance_scale,
+            },
             starting_solution=self.solution,
         )
 
@@ -339,6 +406,7 @@ class TheveninECM:
         self.terminal_voltage_V = last("Voltage [V]")
         self.open_circuit_voltage_V = last("Open-circuit voltage [V]")
         self.soc = last("SoC")
+        self.updateCellSocEstimates()
         self.temp_C = last("Cell temperature [degC]")
         self.heat_W = last("Total heat generation [W]")
 
@@ -350,6 +418,8 @@ class TheveninECM:
         self.discharged_energy_kWh += max(energy_kWh, 0)
         self.charged_energy_kWh += max(-energy_kWh, 0)
         self.shunt_coulomb_count_C += self.current_A * dt_s
+        self.ah_throughput += abs(self.current_A) * dt_s / 3600
+        self.energy_throughput_kWh += abs(energy_kWh)
         self.elapsed_time_s += dt_s
 
         # step 10, publish
@@ -364,6 +434,13 @@ class TheveninECM:
             "terminal_power_W": self.terminal_power_W,
             "heat_W": self.heat_W,
             "soc": self.soc,
+            "capacity_soh": self.capacity_soh,
+            "resistance_scale": self.resistance_scale,
+            "effective_capacity_Ah": self.getEffectivePackCapacity_Ah(),
+            "ah_throughput": self.ah_throughput,
+            "energy_throughput_kWh": self.energy_throughput_kWh,
+            "min_cell_soc": self.min_cell_soc,
+            "max_cell_soc": self.max_cell_soc,
             "temp_C": self.temp_C,
             "discharge_limit_W": self.getDischargeLimit_W(),
             "charge_limit_W": self.getChargeLimit_W(),
@@ -417,9 +494,11 @@ class TheveninECM:
 
     # prints the model setup
     def summary(self):
-        pack_c1_grid_f = self.pack_map.tau_s / self.pack_map.r1_ohm
-        r0_text = self.describeMapValue(self.pack_map.r0_ohm, 1000, "mOhm")
-        r1_text = self.describeMapValue(self.pack_map.r1_ohm, 1000, "mOhm")
+        effective_r0_grid = self.pack_map.r0_ohm * self.resistance_scale
+        effective_r1_grid = self.pack_map.r1_ohm * self.resistance_scale
+        pack_c1_grid_f = self.pack_map.tau_s / effective_r1_grid
+        r0_text = self.describeMapValue(effective_r0_grid, 1000, "mOhm")
+        r1_text = self.describeMapValue(effective_r1_grid, 1000, "mOhm")
         c1_text = self.describeMapValue(pack_c1_grid_f, 1, "F")
         tau_text = self.describeMapValue(self.pack_map.tau_s, 1, "s")
         lines = [
@@ -430,6 +509,10 @@ class TheveninECM:
             f"Pack C1: {c1_text}",
             f"Time constant: {tau_text}",
             f"Thermal mass: {self.pack.heat_capacity_jpk:.0f} J/K",
+            "Level 4 aging/imbalance state: enabled",
+            f"Capacity SOH: {self.capacity_soh:.4f}",
+            f"Resistance scale: {self.resistance_scale:.4f}",
+            f"SOC imbalance: +/-{self.soc_imbalance:.4f}",
         ]
         if self.cell_map.isFlat():
             lines.append(

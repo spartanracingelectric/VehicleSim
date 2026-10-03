@@ -82,6 +82,19 @@ class TestConstructorValidation:
         with pytest.raises(ValueError):
             make_tire(**bad)
 
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            dict(longitudinal_stiffness=None, longitudinal_stiffness_per_load=-1.0),
+            dict(lateral_stiffness=None, lateral_stiffness_per_load=-1.0),
+            dict(longitudinal_stiffness_per_load=25.0),  # fixed CS is also set by make_tire -> both
+            dict(lateral_stiffness_per_load=30.0),       # fixed CA is also set by make_tire -> both
+        ],
+    )
+    def test_bad_per_load_stiffness_raises(self, bad):
+        with pytest.raises(ValueError):
+            make_tire(**bad)
+
     def test_valid_tire_constructs(self):
         tire = make_tire()
         assert tire.radius_m == RADIUS
@@ -203,6 +216,46 @@ class TestAgainstTextbook:
         ref_fx, ref_fy, _ = dugoff(0.03, 0.04, 1000.0, cs=80000.0, ca=30000.0, mu=1.1)
         assert fx == pytest.approx(ref_fx, rel=1e-6)
         assert fy == pytest.approx(ref_fy, rel=1e-6)
+
+
+# ---------------------------------------------------------------- load-scaled stiffness (Cs = c_long * Fz)
+C_LONG = 25.691
+C_LAT = 33.959
+
+
+def make_load_scaled_tire():
+    return make_tire(
+        longitudinal_stiffness=None,
+        lateral_stiffness=None,
+        longitudinal_stiffness_per_load=C_LONG,
+        lateral_stiffness_per_load=C_LAT,
+    )
+
+
+class TestLoadScaledStiffness:
+    @pytest.mark.parametrize("fz", FZS)
+    @pytest.mark.parametrize("alpha", [-0.2, 0.0, 0.03, 0.4])
+    @pytest.mark.parametrize("sigma", [-0.5, 0.0, 0.05, 0.5])
+    def test_matches_reference_with_stiffness_times_load(self, sigma, alpha, fz):
+        fx, fy, _ = solve(make_load_scaled_tire(), sigma, alpha, fz)
+        ref_fx, ref_fy, _ = dugoff(sigma, alpha, fz, cs=C_LONG * fz, ca=C_LAT * fz)
+        assert fx == pytest.approx(ref_fx, rel=1e-6, abs=1e-6)
+        assert fy == pytest.approx(ref_fy, rel=1e-6, abs=1e-6)
+
+    def test_small_slip_force_scales_with_load(self):
+        fx_1, fy_1, _ = solve(make_load_scaled_tire(), 0.001, 0.001, FZ)
+        fx_2, fy_2, _ = solve(make_load_scaled_tire(), 0.001, 0.001, 2 * FZ)
+        assert fx_2 == pytest.approx(2 * fx_1, rel=1e-6)
+        assert fy_2 == pytest.approx(2 * fy_1, rel=1e-6)
+
+    def test_locked_wheel_uses_full_friction(self):
+        fx, fy, _ = solve(make_load_scaled_tire(), -1.0, 0.1, FZ)
+        assert math.hypot(fx, fy) == pytest.approx(MU * FZ, rel=1e-6)
+
+    @pytest.mark.filterwarnings("error")
+    def test_no_load_means_no_force(self):
+        fx, fy, _ = solve(make_load_scaled_tire(), 0.2, 0.1, 0.0)
+        assert fx == 0.0 and fy == 0.0
 
 
 # ---------------------------------------------------------------- linear region

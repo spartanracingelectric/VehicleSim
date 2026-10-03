@@ -19,11 +19,19 @@ class TestTireConfig:
     def test_is_a_tire_config(self, name):
         assert isinstance(tires[name], TireConfig)
 
-    @pytest.mark.parametrize("field", ["radius_m", "longitudinal_stiffness", "lateral_stiffness", "tireroadfriction"])
+    @pytest.mark.parametrize("field", ["radius_m", "tireroadfriction"])
     def test_parameter_is_set_and_positive(self, name, field):
         value = getattr(tires[name], field)
         assert value is not None, f"{name}.{field} is not set (still None)"
         assert value > 0, f"{name}.{field} must be > 0, got {value}"
+
+    @pytest.mark.parametrize("direction", ["longitudinal", "lateral"])
+    def test_stiffness_is_set_one_way_and_positive(self, name, direction):
+        fixed = getattr(tires[name], f"{direction}_stiffness")
+        per_load = getattr(tires[name], f"{direction}_stiffness_per_load")
+        assert (fixed is None) != (per_load is None), f"{name}: set exactly one of {direction}_stiffness / {direction}_stiffness_per_load"
+        value = fixed if fixed is not None else per_load
+        assert value > 0, f"{name}.{direction} stiffness must be > 0, got {value}"
 
     def test_radius_is_a_plausible_size_in_meters(self, name):
         assert 0.1 <= tires[name].radius_m <= 0.6

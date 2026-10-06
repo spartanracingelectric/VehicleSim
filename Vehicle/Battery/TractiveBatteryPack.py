@@ -91,6 +91,10 @@ class TractiveBatteryPack:
         self.min_voltage_v = cell.min_voltage_v * series_cells
         self.max_voltage_v = cell.max_voltage_v * series_cells
 
+        # keep every step in the history lists (time_s, soc_history, ...).
+        # long runs that log on their own can turn this off so the lists don't eat all the memory
+        self.save_history = True
+
         self.reset()
 
     # gets the number of cells in the pack
@@ -199,12 +203,13 @@ class TractiveBatteryPack:
         )
         self.elapsed_time_s += dt_s
 
-        self.time_s.append(self.elapsed_time_s)
-        self.soc_history.append(self.soc)
-        self.temp_history_C.append(self.temp_C)
-        self.current_history_A.append(self.current_A)
-        self.voltage_history_V.append(self.terminal_voltage_V)
-        self.power_history_W.append(self.terminal_power_W)
+        if self.save_history:
+            self.time_s.append(self.elapsed_time_s)
+            self.soc_history.append(self.soc)
+            self.temp_history_C.append(self.temp_C)
+            self.current_history_A.append(self.current_A)
+            self.voltage_history_V.append(self.terminal_voltage_V)
+            self.power_history_W.append(self.terminal_power_W)
 
     def advanceConstantCurrent(self, current_A, duration_s):
         if duration_s <= 0:

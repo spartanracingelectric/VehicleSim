@@ -1,23 +1,18 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))    # repo root, so this also runs as a file or with the run button
 import matplotlib.pyplot as plt
-from Vehicle.Tire.TireConfig2 import TireConfig
+from Vehicle.Tire.Configs.tire1 import tire1
 
-#TODO: 
+# run: python Tests/tireTest.py (or python -m Tests.tireTest from the repo root)
+# (moved here from Vehicle/Tire/Configs/tiretesting2.py, the tire itself is now Configs/tire1.py)
+
+#TODO:
 #get the right coefficients for c_long/lat/tiremu dependent on load
 #Create a for loop on Fz to test tire load sensitivity
 #figure out how to import some stuff from another file for Fz, Vx, Vy, omega, etc
 #split latmu and longmu
 
-#Assumptions:
-#4 deg static camber, 8psi tires parsed from TTC 667N
-#NO TIRE LOAD SENSITIVITY   
-#16" longitudinal tire behavior extrapolated from 20" & 18" R20 behavior
-
-tire1 = TireConfig(
-    radius_m = 0.2032,
-    c_long = 25.691, #cornering stiffness N/rad divided by normal load
-    c_lat = 33.959, #longitudinal stiffnes N/rad divided by normal load
-    tiremu = 1.2
-)
 kappa, alpha = tire1.calculateslip(
     Vx = 25, #vehicle speed 25 m/s
     Vy = 0, #lat velocity (m/s)

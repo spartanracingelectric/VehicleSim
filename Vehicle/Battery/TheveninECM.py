@@ -332,6 +332,9 @@ class TheveninECM:
         self.current_A = 0.0
         self.terminal_power_W = 0.0
         self.heat_W = 0.0
+        self.cooling_power_W = 0.0
+        self.cooling_energy_Wh = 0.0
+        self.net_heat_W = 0.0
         self.discharged_energy_kWh = 0.0
         self.charged_energy_kWh = 0.0
         self.shunt_coulomb_count_C = 0.0
@@ -389,6 +392,7 @@ class TheveninECM:
         power_W = self.clampPower_W(requested_power_W)
 
         # steps 6 to 9 are solved by pybamm
+        step_start_s = 0.0 if self.solution is None else self.solution.t[-1]
         self.solution = self.simulation.step(
             dt_s,
             inputs={
@@ -409,6 +413,18 @@ class TheveninECM:
         self.updateCellSocEstimates()
         self.temp_C = last("Cell temperature [degC]")
         self.heat_W = last("Total heat generation [W]")
+        # Use the existing cell-to-jig transfer: the jig approximates ambient
+        # but is a finite thermal node, so (T_cell - T_ambient) / Rth is not exact.
+        self.cooling_power_W = -last("Heat transfer from cell to jig [W]")
+        if self.thermal_resistance_kpw is not None:
+            step_times = self.solution.t >= step_start_s
+            cooling_power_W = -self.solution[
+                "Heat transfer from cell to jig [W]"
+            ].entries[step_times]
+            self.cooling_energy_Wh += np.trapezoid(
+                cooling_power_W, self.solution.t[step_times]
+            ) / 3600
+        self.net_heat_W = self.heat_W - self.cooling_power_W
 
         # pybamm adds its overpotentials, the doc subtracts them
         self.polarization_voltage_V = -last("Element-1 overpotential [V]")
@@ -433,6 +449,9 @@ class TheveninECM:
             "terminal_voltage_V": self.terminal_voltage_V,
             "terminal_power_W": self.terminal_power_W,
             "heat_W": self.heat_W,
+            "cooling_power_W": self.cooling_power_W,
+            "cooling_energy_Wh": self.cooling_energy_Wh,
+            "net_heat_W": self.net_heat_W,
             "soc": self.soc,
             "capacity_soh": self.capacity_soh,
             "resistance_scale": self.resistance_scale,
@@ -455,6 +474,9 @@ class TheveninECM:
         self.terminal_voltage_V_history = [self.terminal_voltage_V]
         self.terminal_power_W_history = [0.0]
         self.heat_W_history = [0.0]
+        self.cooling_power_W_history = [self.cooling_power_W]
+        self.cooling_energy_Wh_history = [self.cooling_energy_Wh]
+        self.net_heat_W_history = [self.net_heat_W]
         self.soc_history = [self.soc]
         self.temp_C_history = [self.temp_C]
         self.discharged_energy_kWh_history = [0.0]
@@ -474,6 +496,9 @@ class TheveninECM:
             )
             self.terminal_power_W_history.append(reading["terminal_power_W"])
             self.heat_W_history.append(reading["heat_W"])
+            self.cooling_power_W_history.append(reading["cooling_power_W"])
+            self.cooling_energy_Wh_history.append(reading["cooling_energy_Wh"])
+            self.net_heat_W_history.append(reading["net_heat_W"])
             self.soc_history.append(reading["soc"])
             self.temp_C_history.append(reading["temp_C"])
             self.discharged_energy_kWh_history.append(
@@ -540,7 +565,9 @@ class TheveninECM:
 def main():
     from Vehicle.Battery.Configs.sr17 import sr17
 
-    ecm = TheveninECM(sr17)
+    ecm = TheveninECM(sr17,
+                      #test value
+                      thermal_resistance_kpw=0.5)
     print(ecm.summary())
 
     dt_s = 0.5
@@ -554,7 +581,8 @@ def main():
     print(f"Recovered voltage: {ecm.terminal_voltage_V:.2f} V")
     print(f"Polarization left: {ecm.polarization_voltage_V:.3f} V")
     print(f"Final temperature: {ecm.temp_C:.2f} C")
-    print(f"Energy discharged: {ecm.discharged_energy_kWh:.3f} kWh")
+    print(f"Cumulative thermal loss: {ecm.cooling_energy_Wh:.3f} Wh")
+    print(f"Net thermal power: {ecm.net_heat_W:.2f} W")
 
 
 if __name__ == "__main__":

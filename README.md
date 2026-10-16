@@ -51,6 +51,25 @@ python Tests/motorDatasheetTest.py                   # motor + inverter vs the A
 The sim runs about **2× slower than real time** (15 s of driving ≈ 30 s on the computer).
 That's fine: the sim has its own clock (see [sim time vs computer time](#sim-time-vs-computer-time)).
 
+### Using it from another repo (e.g. SRE-VCU's SIL tests)
+VehicleSim installs as a package (`pyproject.toml`): `Vehicle`, `Functions` and `Data`, with the same imports as here.
+
+```bash
+pip install "vehiclesim @ git+https://github.com/spartanracingelectric/VehicleSim.git@VehSim-1"   # from GitHub
+pip install -e path/to/VehicleSim              # from a local checkout (the car only, numpy)
+pip install -e "path/to/VehicleSim[dev]"       # plus pandas, matplotlib, pytest for logs, plots and Tests/
+```
+
+```python
+from copy import deepcopy
+from Vehicle.MainConfigs.SR18 import SR18
+car = deepcopy(SR18)
+car.update(apps_percent=100)                 # one 100 us step
+```
+
+SRE-VCU's SIL container installs it from GitHub (the `VehSim-1` branch) every time it starts, so changes here
+reach it once they're **pushed** (see `SRE-VCU/dev/test/docker/README.md`).
+
 ---
 
 ## Project layout

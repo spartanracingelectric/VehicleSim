@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 *.csv
+# pip install -e . output
+*.egg-info/
+build/

@@ -24,98 +24,91 @@ class Scenario:
 def stopWhenBmsShutsDown(vehicle):
     return vehicle.bms.isShutdown()
 
-# everything recorded every logged tick
-CHANNELS = ("apps_percent", "torque_request_Nm", "torque_command_Nm", "torque_feedback_Nm", "speed_mps",
-            "distance_m", "motor_rpm", "pack_power_W", "pack_voltage_V", "pack_current_A",
-            "min_cell_voltage_mV", "soc", "pack_temp_C", "bms_power_kW")
-FLAGS = ("overpower", "shutdown", "voltage_saturated", "traction_limited")
-
 def runScenario(scenario):
-    from Vehicle.MainConfigs.SR18 import SR18
-    vehicle = deepcopy(scenario.vehicle if scenario.vehicle is not None else SR18)
-    vehicle.battery.save_history = False    # the scenario keeps its own log below
-
-    # starting conditions
-    if scenario.start_soc is not None or scenario.start_temp_C is not None:
-        vehicle.battery.reset(initial_soc=scenario.start_soc, initial_temp_C=scenario.start_temp_C)
-    vehicle.chassis.speed_mps = scenario.start_speed_kph / 3.6
-
+    vehicle = startCar(scenario)
     control_period_s = vehicle.getControlPeriod_s()
-    max_periods = round(scenario.run_time_s / control_period_s)
     record_every = 1 if scenario.record_every_s is None else max(1, round(scenario.record_every_s / control_period_s))
-    max_records = (max_periods - 1) // record_every + 2     # +1 for the last tick if it stops early
-    result = SimpleNamespace(
-        scenario_name=scenario.name,
-        num_motors=vehicle.num_motors,
-        peak_torque_Nm=vehicle.motor.peakTorque_Nm,
-        max_torque_request_Nm=vehicle.vcu.max_torque_request_Nm,
-        vcu_loop_period_s=vehicle.vcu.loop_period_s,
-        bms_sample_period_s=vehicle.bms.sample_period_s,
-        control_period_s=control_period_s,
-        record_every=record_every,
-        tick=np.zeros(max_records, dtype=int),          # which tick each logged row is
-        time_s=np.zeros(max_records),
-        power_threshold_kW=np.full(max_records, vehicle.bms.max_power_threshold_kW),
-    )
-
-    # This for loop does -> result."variable_name" = np.zeros(num_periods)
-    for channel in CHANNELS:
-        setattr(result, channel, np.zeros(max_records))
-
-    # This for loop does -> result."variable_name" = np.zeroes(num_periods, dtype = bool)
-    for flag in FLAGS:
-        setattr(result, flag, np.zeros(max_records, dtype=bool))
 
     # one pass = one inverter switching period (100 us): the driver's pedal goes into the car
-    row = 0
-    for k in range(max_periods):
-        time_s = k * control_period_s
+    log = []
+    for tick in range(round(scenario.run_time_s / control_period_s)):
+        time_s = tick * control_period_s
         apps_percent = scenario.pedal(time_s)
         vehicle.update(apps_percent)
 
-        stopping = ((scenario.stop_at_distance_m is not None and vehicle.chassis.getDistance_m() >= scenario.stop_at_distance_m)
-                    or (scenario.stop_when is not None and scenario.stop_when(vehicle)))
-        if k % record_every == 0 or stopping:
-            result.tick[row] = k
-            result.time_s[row] = time_s
-            record(result, row, vehicle, apps_percent)
-            row += 1
-        if stopping:
+        finished = isFinished(scenario, vehicle)
+        if tick % record_every == 0 or finished:
+            log.append(readCar(vehicle, tick, time_s, apps_percent))
+        if finished:
             break
 
-    # cut everything down to how far it actually ran
-    for name in ("tick", "time_s", "power_threshold_kW") + CHANNELS + FLAGS:
-        setattr(result, name, getattr(result, name)[:row])
+    # every reading becomes an array over the run: result.speed_mps[i] is the speed at result.time_s[i]
+    result = SimpleNamespace(**{name: np.array([row[name] for row in log]) for name in log[0]})
 
+    # numbers about the run and the car that the checks and plots need
+    result.scenario_name = scenario.name
+    result.control_period_s = control_period_s
+    result.record_every = record_every
     result.end_time_s = result.time_s[-1] + control_period_s
+    result.num_motors = vehicle.num_motors
+    result.peak_torque_Nm = vehicle.motor.peakTorque_Nm
+    result.max_torque_request_Nm = vehicle.vcu.max_torque_request_Nm
+    result.vcu_loop_period_s = vehicle.vcu.loop_period_s
+    result.bms_sample_period_s = vehicle.bms.sample_period_s
     result.energy_used_kWh = vehicle.battery.discharged_energy_kWh - vehicle.battery.charged_energy_kWh
-    result.bms_faults = [name for name, active in (("undervoltage", vehicle.bms.has_undervoltage_fault()),
-                                                   ("overvoltage", vehicle.bms.has_overvoltage_fault()),
-                                                   ("overtemperature", vehicle.bms.has_overtemperature_fault()),
-                                                   ("undertemperature", vehicle.bms.has_undertemperature_fault()))
-                         if active]
+    result.bms_faults = bmsFaults(vehicle.bms)
     return result
 
-# Collects the results for every loop
-def record(result, row, vehicle, apps_percent):
-    result.apps_percent[row] = apps_percent
-    result.torque_request_Nm[row] = vehicle.vcu.getTorqueRequest_Nm()
-    result.torque_command_Nm[row] = vehicle.inverter.getTorqueCommand_Nm()
-    result.torque_feedback_Nm[row] = vehicle.getTorqueFeedback_Nm()
-    result.speed_mps[row] = vehicle.chassis.getSpeed_mps()
-    result.distance_m[row] = vehicle.chassis.getDistance_m()
-    result.motor_rpm[row] = vehicle.getMotorSpeed_radps() * 60 / (2 * np.pi)
-    result.pack_power_W[row] = vehicle.battery.terminal_power_W
-    result.pack_current_A[row] = vehicle.battery.current_A
-    result.pack_voltage_V[row] = vehicle.battery.terminal_voltage_V
-    result.min_cell_voltage_mV[row] = vehicle.bms.min_voltage_mV
-    result.soc[row] = vehicle.battery.soc
-    result.pack_temp_C[row] = vehicle.battery.temp_C
-    result.bms_power_kW[row] = vehicle.bms.power_kW
-    result.overpower[row] = vehicle.bms.has_overpower_fault()
-    result.shutdown[row] = vehicle.bms.isShutdown()
-    result.voltage_saturated[row] = vehicle.inverter.isVoltageSaturated()
-    result.traction_limited[row] = vehicle.chassis.isTractionLimited()
+# a fresh copy of the car (so runs can't change each other), started the way the scenario says
+def startCar(scenario):
+    from Vehicle.MainConfigs.SR18 import SR18
+    vehicle = deepcopy(scenario.vehicle if scenario.vehicle is not None else SR18)
+    vehicle.battery.save_history = False    # the scenario keeps its own log
+    if scenario.start_soc is not None or scenario.start_temp_C is not None:
+        vehicle.battery.reset(initial_soc=scenario.start_soc, initial_temp_C=scenario.start_temp_C)
+    vehicle.chassis.speed_mps = scenario.start_speed_kph / 3.6
+    return vehicle
+
+def isFinished(scenario, vehicle):
+    if scenario.stop_at_distance_m is not None and vehicle.chassis.getDistance_m() >= scenario.stop_at_distance_m:
+        return True
+    return scenario.stop_when is not None and scenario.stop_when(vehicle)
+
+# everything logged on one tick
+def readCar(vehicle, tick, time_s, apps_percent):
+    return {
+        "tick": tick,
+        "time_s": time_s,
+        "apps_percent": float(apps_percent),
+        "torque_request_Nm": vehicle.vcu.getTorqueRequest_Nm(),
+        "torque_command_Nm": vehicle.inverter.getTorqueCommand_Nm(),
+        "torque_feedback_Nm": vehicle.getTorqueFeedback_Nm(),
+        "speed_mps": vehicle.chassis.getSpeed_mps(),
+        "distance_m": vehicle.chassis.getDistance_m(),
+        "motor_rpm": vehicle.getMotorSpeed_radps() * 60 / (2 * np.pi),
+        "pack_power_W": vehicle.battery.terminal_power_W,
+        "pack_current_A": vehicle.battery.current_A,
+        "pack_voltage_V": vehicle.battery.terminal_voltage_V,
+        "min_cell_voltage_mV": vehicle.bms.min_voltage_mV,
+        "soc": vehicle.battery.soc,
+        "pack_temp_C": vehicle.battery.temp_C,
+        "bms_power_kW": vehicle.bms.power_kW,
+        "power_threshold_kW": vehicle.bms.max_power_threshold_kW,
+        "overpower": vehicle.bms.has_overpower_fault(),
+        "shutdown": vehicle.bms.isShutdown(),
+        "voltage_saturated": vehicle.inverter.isVoltageSaturated(),
+        "traction_limited": vehicle.chassis.isTractionLimited(),
+    }
+
+# which faults are active at the end, for the summary
+def bmsFaults(bms):
+    faults = {
+        "undervoltage": bms.has_undervoltage_fault(),
+        "overvoltage": bms.has_overvoltage_fault(),
+        "overtemperature": bms.has_overtemperature_fault(),
+        "undertemperature": bms.has_undertemperature_fault(),
+    }
+    return [name for name, active in faults.items() if active]
 
 # pedal and torque, speed and motor rpm, pack power vs the 80 kW flag, pack voltage and current
 # save_path=None opens a window, otherwise saves a png there

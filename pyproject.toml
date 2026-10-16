@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vehiclesim"
+version = "0.1.0"
+description = "SR18 powertrain and straight-line vehicle sim (battery, BMS, inverter, motor, chassis)"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",    # all the car itself needs (Vehicle/, Functions/)
+]
+
+[project.optional-dependencies]
+# reading MoTeC logs (Data/csvParser.py), plotting (Data/plot.py) and running Tests/
+# install with: pip install -e ".[dev]"
+dev = ["pandas", "matplotlib", "pytest"]
+
+# installs Vehicle, Functions and Data as they are, so imports stay `from Vehicle.MainConfigs.SR18 import SR18`.
+# Tests/ and the scripts at the root stay out of the package
+[tool.setuptools.packages.find]
+include = ["Vehicle*", "Functions*", "Data*"]

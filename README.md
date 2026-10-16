@@ -1,6 +1,6 @@
 # VehicleSim
 
-A powertrain and straight-line vehicle simulation of **SR17 with 4 AMK DD5 hub motors and 4 inverters**.
+A powertrain and straight-line vehicle simulation of **SR18 with 4 AMK DD5 hub motors and 4 inverters**.
 
 It simulates the whole chain, timed the way the real car is timed:
 
@@ -58,11 +58,11 @@ That's fine: the sim has its own clock (see [sim time vs computer time](#sim-tim
 ```
 Vehicle/
   VehicleConfig.py          the car: holds every part and runs one update of the whole chain
-  MainConfigs/SR17.py       SR17 assembled from the parts below (swap parts here)
+  MainConfigs/SR18.py       SR18 assembled from the parts below (swap parts here)
   VCU/                      VCUConfig.py   + Configs/vcu1.py       pedal -> torque request, 10 ms loop
   Inverter/                 InverterConfig.py + Configs/inverter1.py   current control, field weakening, PWM
   Motor/                    MotorConfig.py + Configs/amk_dd5.py, emrax_228.py (placeholder), amk_motor_datasheet.pdf
-  Battery/                  TractiveBatteryPack.py, Cell.py + Configs/sr17.py (+ battery2/3)
+  Battery/                  TractiveBatteryPack.py, Cell.py + Configs/sr18.py (+ battery2/3)
   BMS/                      BMSConfig.py   + Configs/bms1.py       cell monitoring, faults, 80 kW flag
   Tire/                     TireConfig2.py + Configs/tire1.py
   Axel/ Brake/ Driver/      placeholders (mass only for now)
@@ -104,7 +104,7 @@ Every part follows the same pattern:
 |---|---|---|
 | **Class** | `Vehicle/Motor/MotorConfig.py` | the part's physics: its own `update()` and getters |
 | **Config** | `Vehicle/Motor/Configs/amk_dd5.py` | one specific part: `amk_dd5 = MotorConfig(Rs=..., ...)` |
-| **Car** | `Vehicle/MainConfigs/SR17.py` | which configs make up the car, plus car-level numbers (mass, gear ratio, motor count) |
+| **Car** | `Vehicle/MainConfigs/SR18.py` | which configs make up the car, plus car-level numbers (mass, gear ratio, motor count) |
 
 Two rules for config files (`loadConfigs` imports every `.py` in a `Configs/` folder):
 
@@ -112,10 +112,10 @@ Two rules for config files (`loadConfigs` imports every `.py` in a `Configs/` fo
 2. **No code that runs on import** (no prints, no test calls, no `plt.show()`). Put demos under
    `if __name__ == "__main__":`. A config that does work on import runs every time *any* sim starts.
 
-**To try another car**, make another file in `MainConfigs/` and swap it in (`VEHICLE = SR17` in a test,
+**To try another car**, make another file in `MainConfigs/` and swap it in (`VEHICLE = SR18` in a test,
 or `Scenario(vehicle=...)`). `emrax_228.py` is waiting for the EMRAX's electrical values.
 
-**Always `deepcopy` the car before running it.** `SR17` is one shared object and it carries run state
+**Always `deepcopy` the car before running it.** `SR18` is one shared object and it carries run state
 (battery charge, BMS latch, motor currents, controller memory). The test helpers already do this.
 
 ---
@@ -197,7 +197,7 @@ Pe     = 1.5 · (vd·id + vq·iq)          P_copper = 1.5 · Rs · (id² + iq²)
 
 ### Battery — `Vehicle/Battery/TractiveBatteryPack.py`, `Cell.py` (Level 2: Thevenin resistance)
 - 140 cells in series × 3 in parallel, 5 Ah / 6.7 mΩ cells
-- OCV from an SOC table (`Configs/sr17.py`), terminal voltage `V = OCV − I·R_pack`
+- OCV from an SOC table (`Configs/sr18.py`), terminal voltage `V = OCV − I·R_pack`
 - SOC by coulomb counting, `I²R` heat, temperature with no cooling (adiabatic)
 - `save_history` (on by default) keeps every step in lists. Long runs turn it off.
 
@@ -234,9 +234,9 @@ Every step is checked to balance (the motor tests check `motor power = shaft + c
 | current / voltage controller gains | Kp 0.58/0.64, Tn 1.2 ms / Kp 0.08, Tn 6 ms | datasheet controller settings |
 | VCU loop / BMS sample | 10 ms / 50 ms | team |
 | BMS limits | 4200/2800 mV, 60/0 °C, 80 kW | `bms1.py` |
-| battery | 140s3p, 5 Ah, 6.7 mΩ cells, 50.8 kg | `Battery/Configs/sr17.py` |
+| battery | 140s3p, 5 Ah, 6.7 mΩ cells, 50.8 kg | `Battery/Configs/sr18.py` |
 | tire radius / grip | 0.2032 m / μ 1.2 | `tire1.py` |
-| vehicle mass | 204.1 kg + battery | `SR17.py` |
+| vehicle mass | 204.1 kg + battery | `SR18.py` |
 | **inverter efficiency** | 0.97 | **placeholder** |
 | **switching frequency** | 10 kHz | **placeholder** |
 | **drag area / rolling resistance** | 1.2 m² / 0.015 | **placeholders** |

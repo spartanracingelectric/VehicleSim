@@ -19,7 +19,7 @@ class Scenario:
     start_temp_C: float = None
     start_speed_kph: float = 0.0
     record_every_s: float = None                    # None = log every tick (100 us), long runs can log less often
-    vehicle: object = None                          # None = SR17
+    vehicle: object = None                          # None = SR18
 
 def stopWhenBmsShutsDown(vehicle):
     return vehicle.bms.isShutdown()
@@ -31,8 +31,8 @@ CHANNELS = ("apps_percent", "torque_request_Nm", "torque_command_Nm", "torque_fe
 FLAGS = ("overpower", "shutdown", "voltage_saturated", "traction_limited")
 
 def runScenario(scenario):
-    from Vehicle.MainConfigs.SR17 import SR17
-    vehicle = deepcopy(scenario.vehicle if scenario.vehicle is not None else SR17)
+    from Vehicle.MainConfigs.SR18 import SR18
+    vehicle = deepcopy(scenario.vehicle if scenario.vehicle is not None else SR18)
     vehicle.battery.save_history = False    # the scenario keeps its own log below
 
     # starting conditions

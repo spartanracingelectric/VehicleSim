@@ -1,7 +1,7 @@
 import argparse
 import math
 
-from Vehicle.Battery.Configs.sr17 import sr17
+from Vehicle.Battery.Configs.sr18 import sr18
 
 
 POWER_KW = 5.0
@@ -78,7 +78,7 @@ def main():
     args = parser.parse_args()
 
     sim = SimRunner(
-        sr17,
+        sr18,
         args.power_kw,
         args.duration_s,
         args.dt_s,

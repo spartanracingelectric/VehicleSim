@@ -1,6 +1,6 @@
 import numpy as np
 from Functions.loadConfigs import loadConfigs
-from Vehicle.MainConfigs.SR17 import SR17
+from Vehicle.MainConfigs.SR18 import SR18
 from Data.csvParser import load_speed_trace
 from Data.plot import plot
 
@@ -20,7 +20,7 @@ class SimRunner:
         self.power_W = np.zeros(len(self.time_s))
         
 def main():
-    sim = SimRunner(SR17)
+    sim = SimRunner(SR18)
     run(sim)
     plot(sim)
 

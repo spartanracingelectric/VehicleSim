@@ -11,9 +11,9 @@ motorConfigs = loadConfigs("Vehicle.Motor.Configs")
 tireConfigs = loadConfigs("Vehicle.Tire.Configs")
 vcuConfigs = loadConfigs("Vehicle.VCU.Configs")
 
-SR17 = VehicleConfig(
+SR18 = VehicleConfig(
     vehicle_mass_kg=204.1,
-    battery=batteryConfigs.sr17,
+    battery=batteryConfigs.sr18,
     axel=axelConfigs.axel1,
     bms=bmsConfigs.bms1,
     brake=brakeConfigs.brake1,

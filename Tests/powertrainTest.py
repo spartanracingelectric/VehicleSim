@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))    # repo root, so this also runs as a file or with the run button
 import numpy as np
-from Vehicle.MainConfigs.SR17 import SR17
+from Vehicle.MainConfigs.SR18 import SR18
 from Data.plot import plotAcceleration
 from Tests.scenario import Scenario, runScenario
 from Tests.pedals import ramp
@@ -13,7 +13,7 @@ from Tests.checks import ALWAYS, accelerates, overpowerFlagged
 # pedal -> vcu (10 ms loop) -> inverters -> motors -> battery -> bms, and the motor torque moves the car.
 # power isn't limited (the flashed VCU does that), the bms flags when the pack goes over 80 kW
 
-VEHICLE = SR17                # swap in another car config here
+VEHICLE = SR18                # swap in another car config here
 RUN_TIME_S = 15.0             # how long the driver holds full throttle
 THROTTLE_RAMP_TIME_S = 0.8    # 0 -> 100% pedal, the fastest stab in the Crows log was 10 -> 90% in 0.64 s
 ACCEL_EVENT_M = 75.0          # length of the fsae acceleration event

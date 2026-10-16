@@ -6,7 +6,7 @@ from copy import deepcopy
 from types import SimpleNamespace
 from Vehicle.Inverter.Configs.inverter1 import inverter1
 from Vehicle.Motor.Configs.amk_dd5 import amk_dd5
-from Vehicle.Battery.Configs.sr17 import sr17
+from Vehicle.Battery.Configs.sr18 import sr18
 from Data.plot import plotDrive
 
 # run: python Tests/motorInverterTest.py (or python -m Tests.motorInverterTest from the repo root)
@@ -68,7 +68,7 @@ def getTorqueRequest(scenario, time_s):
 def simulate(scenario):
     inverter = deepcopy(inverter1)
     motor = deepcopy(amk_dd5)
-    battery = deepcopy(sr17)
+    battery = deepcopy(sr18)
     battery.reset(initial_soc=scenario.initial_soc)
 
     control_period_s = inverter.switching_period_s

@@ -38,7 +38,7 @@ def runScenario(scenario):
     # starting conditions
     if scenario.start_soc is not None or scenario.start_temp_C is not None:
         vehicle.battery.reset(initial_soc=scenario.start_soc, initial_temp_C=scenario.start_temp_C)
-    vehicle.speed_mps = scenario.start_speed_kph / 3.6
+    vehicle.chassis.speed_mps = scenario.start_speed_kph / 3.6
 
     control_period_s = vehicle.getControlPeriod_s()
     max_periods = round(scenario.run_time_s / control_period_s)
@@ -73,7 +73,7 @@ def runScenario(scenario):
         apps_percent = scenario.pedal(time_s)
         vehicle.update(apps_percent)
 
-        stopping = ((scenario.stop_at_distance_m is not None and vehicle.getDistance_m() >= scenario.stop_at_distance_m)
+        stopping = ((scenario.stop_at_distance_m is not None and vehicle.chassis.getDistance_m() >= scenario.stop_at_distance_m)
                     or (scenario.stop_when is not None and scenario.stop_when(vehicle)))
         if k % record_every == 0 or stopping:
             result.tick[row] = k
@@ -102,8 +102,8 @@ def record(result, row, vehicle, apps_percent):
     result.torque_request_Nm[row] = vehicle.vcu.getTorqueRequest_Nm()
     result.torque_command_Nm[row] = vehicle.inverter.getTorqueCommand_Nm()
     result.torque_feedback_Nm[row] = vehicle.getTorqueFeedback_Nm()
-    result.speed_mps[row] = vehicle.getSpeed_mps()
-    result.distance_m[row] = vehicle.getDistance_m()
+    result.speed_mps[row] = vehicle.chassis.getSpeed_mps()
+    result.distance_m[row] = vehicle.chassis.getDistance_m()
     result.motor_rpm[row] = vehicle.getMotorSpeed_radps() * 60 / (2 * np.pi)
     result.pack_power_W[row] = vehicle.battery.terminal_power_W
     result.pack_current_A[row] = vehicle.battery.current_A
@@ -115,7 +115,7 @@ def record(result, row, vehicle, apps_percent):
     result.overpower[row] = vehicle.bms.has_overpower_fault()
     result.shutdown[row] = vehicle.bms.isShutdown()
     result.voltage_saturated[row] = vehicle.inverter.isVoltageSaturated()
-    result.traction_limited[row] = vehicle.isTractionLimited()
+    result.traction_limited[row] = vehicle.chassis.isTractionLimited()
 
 # pedal and torque, speed and motor rpm, pack power vs the 80 kW flag, pack voltage and current
 # save_path=None opens a window, otherwise saves a png there

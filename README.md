@@ -62,8 +62,9 @@ Vehicle/
   VCU/                      VCUConfig.py   + Configs/vcu1.py       pedal -> torque request, 10 ms loop
   Inverter/                 InverterConfig.py + Configs/inverter1.py   current control, field weakening, PWM
   Motor/                    MotorConfig.py + Configs/amk_dd5.py, emrax_228.py (placeholder), amk_motor_datasheet.pdf
-  Battery/                  TractiveBatteryPack.py, Cell.py + Configs/sr18.py (+ battery2/3)
+  Battery/                  TractiveBatteryPack.py, Cell.py + Configs/sr17.py (+ battery2/3)
   BMS/                      BMSConfig.py   + Configs/bms1.py       cell monitoring, faults, 80 kW flag
+  Chassis/                  ChassisConfig.py + Configs/chassis1.py  car speed: wheel force, grip limit, drag, rolling
   Tire/                     TireConfig2.py + Configs/tire1.py
   Axel/ Brake/ Driver/      placeholders (mass only for now)
 
@@ -145,7 +146,7 @@ In order (`Vehicle/VehicleConfig.py`):
    DC current (`updatePower`).
 5. **Battery**: `battery.update(4 × average DC current)` → voltage sag, SOC, heat.
 6. **BMS**: `bms.updateFromPack(...)` (only acts on its 50 ms sample).
-7. **Chassis**: motor torque × 4 × gear ratio → wheel force (capped by tire grip) − drag − rolling →
+7. **Chassis**: `chassis.update(...)`: motor torque × 4 × gear ratio → wheel force (capped by tire grip) − drag − rolling →
    new car speed → next update's motor speed.
 
 ### Sim time vs computer time
@@ -197,7 +198,7 @@ Pe     = 1.5 · (vd·id + vq·iq)          P_copper = 1.5 · Rs · (id² + iq²)
 
 ### Battery — `Vehicle/Battery/TractiveBatteryPack.py`, `Cell.py` (Level 2: Thevenin resistance)
 - 140 cells in series × 3 in parallel, 5 Ah / 6.7 mΩ cells
-- OCV from an SOC table (`Configs/sr18.py`), terminal voltage `V = OCV − I·R_pack`
+- OCV from an SOC table (`Configs/sr17.py`), terminal voltage `V = OCV − I·R_pack`
 - SOC by coulomb counting, `I²R` heat, temperature with no cooling (adiabatic)
 - `save_history` (on by default) keeps every step in lists. Long runs turn it off.
 
@@ -207,7 +208,7 @@ Pe     = 1.5 · (vd·id + vq·iq)          P_copper = 1.5 · Rs · (id² + iq²)
   contactors stay open until reset, even if the cells recover
 - **overpower is only flagged** (> 80 kW), not limited (see design decisions)
 
-### Chassis — `VehicleConfig.updateChassis`
+### Chassis — `ChassisConfig.update`
 ```
 wheel force = 4 × torque × 11.81 / 0.2032 m   (capped at tire grip = 1.2 × weight, flagged when it is)
 drag        = ½ · 1.225 · 1.2 m² · v²          rolling = 0.015 × weight
@@ -234,12 +235,12 @@ Every step is checked to balance (the motor tests check `motor power = shaft + c
 | current / voltage controller gains | Kp 0.58/0.64, Tn 1.2 ms / Kp 0.08, Tn 6 ms | datasheet controller settings |
 | VCU loop / BMS sample | 10 ms / 50 ms | team |
 | BMS limits | 4200/2800 mV, 60/0 °C, 80 kW | `bms1.py` |
-| battery | 140s3p, 5 Ah, 6.7 mΩ cells, 50.8 kg | `Battery/Configs/sr18.py` |
+| battery | 140s3p, 5 Ah, 6.7 mΩ cells, 50.8 kg | `Battery/Configs/sr17.py` |
 | tire radius / grip | 0.2032 m / μ 1.2 | `tire1.py` |
 | vehicle mass | 204.1 kg + battery | `SR18.py` |
 | **inverter efficiency** | 0.97 | **placeholder** |
 | **switching frequency** | 10 kHz | **placeholder** |
-| **drag area / rolling resistance** | 1.2 m² / 0.015 | **placeholders** |
+| **drag area / rolling resistance** | 1.2 m² / 0.015 | **placeholders** (`chassis1.py`) |
 | **driver mass** | not included | **placeholder** (`driver1` is 10 kg) |
 
 ---

@@ -1,38 +1,30 @@
-from Functions.constants import G_MPS2, AIR_DENSITY_KGPM3
-
 class VehicleConfig:
     # num_motors: how many motor + inverter pairs share the battery (each motor has its own inverter)
     # gear_ratio: motor turns per wheel turn (wheel torque = motor torque * gear_ratio)
-    # drag_area_m2: drag coefficient * frontal area (Cd * A), rolling_resistance_coeff: rolling force / weight
-    def __init__(self, vehicle_mass_kg, axel, battery, bms, brake, driver, inverter, motor, tire,
-                 vcu=None, num_motors=1, gear_ratio=1.0, drag_area_m2=0.0, rolling_resistance_coeff=0.0):
+    def __init__(self, vehicle_mass_kg, axel, battery, bms, brake, chassis, driver, inverter, motor, tire,
+                 vcu=None, num_motors=1, gear_ratio=1.0):
         self.vehicle_mass_kg = vehicle_mass_kg
         self.axel = axel
         self.battery = battery
         self.bms = bms
         self.brake = brake
+        self.chassis = chassis
         self.driver = driver
         self.inverter = inverter
         self.motor = motor
         self.tire = tire
         self.vcu = vcu
         self.num_motors = num_motors
-        
+
         # temporary here because we're missing other models
         self.gear_ratio = gear_ratio
-        self.drag_area_m2 = drag_area_m2
-        self.rolling_resistance_coeff = rolling_resistance_coeff
 
         # per motor, averaged over the motor's small steps in one update. everything else lives in its own part:
-        # vcu.torque_request_Nm, inverter.torque_command_Nm, battery.current_A, battery.terminal_power_W
+        # vcu.torque_request_Nm, inverter.torque_command_Nm, battery.current_A, battery.terminal_power_W,
+        # chassis.speed_mps
         # torque request / command / feedback line up with the log's MCM Torque Command / Commanded Torque / Torque Feedback
         self.torque_feedback_Nm = 0.0    # what the motor actually made (its Te)
         self.average_copper_loss_W = 0.0
-
-        # chassis state, starts parked
-        self.speed_mps = 0.0
-        self.distance_m = 0.0
-        self.traction_limited = False
 
     # One update = one inverter switching period:
     #   pedal -> vcu (runs its own 10 ms loop, holds the request in between)
@@ -63,7 +55,7 @@ class VehicleConfig:
         # voltage/temperature faults latch a shutdown, overpower is only flagged
         self.bms.updateFromPack(self.battery, control_period_s)
 
-        self.updateChassis(control_period_s)
+        self.chassis.update(self.getWheelForce_N(), self.getMass_kg(), self.tire, control_period_s)
 
         return self.torque_feedback_Nm
 
@@ -108,25 +100,10 @@ class VehicleConfig:
         self.average_copper_loss_W = 0.0
         self.battery.update(0.0, control_period_s)
 
-    # straight line: motor torque through the gearbox pushes the car, drag and rolling resistance hold it back.
-    # every wheel is driven, so the tires can push with up to mu * weight. past that the extra torque just spins
-    # the wheels, that's flagged but not modeled (the real car's traction control is in the VCU firmware)
-    # TODO: wheel slip, load transfer, gearbox losses, rotating inertia of the motors and wheels
-    def updateChassis(self, dt_s):
-        mass_kg = self.getMass_kg()
-        weight_N = mass_kg * G_MPS2
-
-        wheel_force_N = self.num_motors * self.torque_feedback_Nm * self.gear_ratio / self.tire.radius_m
-        grip_N = self.tire.tiremu * weight_N
-        self.traction_limited = abs(wheel_force_N) > grip_N
-        drive_force_N = max(-grip_N, min(wheel_force_N, grip_N))
-
-        drag_N = 0.5 * AIR_DENSITY_KGPM3 * self.drag_area_m2 * self.speed_mps ** 2
-        rolling_N = self.rolling_resistance_coeff * weight_N if self.speed_mps > 0 else 0.0
-
-        acceleration_mps2 = (drive_force_N - drag_N - rolling_N) / mass_kg
-        self.speed_mps = max(0.0, self.speed_mps + acceleration_mps2 * dt_s)
-        self.distance_m += self.speed_mps * dt_s
+    # motor torque through the gearbox and tires, all motors together. the chassis caps it at the tires' grip
+    # TODO: gearbox losses
+    def getWheelForce_N(self):
+        return self.num_motors * self.torque_feedback_Nm * self.gear_ratio / self.tire.radius_m
 
     # same as simrunner: car + battery
     # TODO: driver isn't in here (driver1.mass_kg is still a placeholder)
@@ -135,7 +112,7 @@ class VehicleConfig:
 
     # wheels turn with the car (no slip), motors turn gear_ratio times faster
     def getMotorSpeed_radps(self):
-        return self.speed_mps / self.tire.radius_m * self.gear_ratio
+        return self.chassis.getSpeed_mps() / self.tire.radius_m * self.gear_ratio
 
     # one update covers one inverter switching period
     def getControlPeriod_s(self):
@@ -148,12 +125,3 @@ class VehicleConfig:
     # per motor, averaged over the update
     def getAverageCopperLoss_W(self):
         return self.average_copper_loss_W
-
-    def getSpeed_mps(self):
-        return self.speed_mps
-
-    def getDistance_m(self):
-        return self.distance_m
-
-    def isTractionLimited(self):
-        return self.traction_limited

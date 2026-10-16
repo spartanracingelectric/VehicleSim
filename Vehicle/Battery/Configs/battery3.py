@@ -1,5 +1,8 @@
-from Vehicle.Battery.BatteryConfig import BatteryConfig #TODO: Rename battery3.py to the correct name
+from Vehicle.Battery.TractiveBatteryPack import TractiveBatteryPack
 
-battery3 = BatteryConfig(
+battery3 = TractiveBatteryPack(
     mass_kg=55.8,
+    initial_soc=1.0,
+    initial_temp_C=25.0,
+    ambient_temp_C=25.0,
 )

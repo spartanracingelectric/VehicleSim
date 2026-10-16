@@ -1,3 +1,123 @@
-class BMSConfig: #TODO: Add parameters related to BMS
-    def __init__(self, mass_kg):
-        self.mass_kg = mass_kg #placeholder
+class BMSConfig:
+    def __init__(self, max_cell_voltage_threshold_mV : float, min_cell_voltage_threshold_mV : float, max_temp_threshold_C : float, min_temp_threshold_C : float, max_power_threshold_kW : float, sample_period_s : float = 0.01):
+        self.max_cell_voltage_threshold_mV = max_cell_voltage_threshold_mV;
+        self.min_cell_voltage_threshold_mV = min_cell_voltage_threshold_mV;
+        self.max_temp_threshold_C = max_temp_threshold_C;
+        self.min_temp_threshold_C = min_temp_threshold_C;
+        self.max_power_threshold_kW = max_power_threshold_kW
+        self.sample_period_s = sample_period_s    # how often the bms reads the pack
+        self.time_to_next_sample_s = 0.0          # reads on the first update
+
+        self.cell_voltages_mV = []
+        self.temperatures_C = []
+
+        self.power_kW = 0.0
+        self.current_mA = 0.0
+
+        self.max_voltage_mV = 0.0
+        self.min_voltage_mV = 0.0
+        self.average_voltage_mV = 0.0
+        self.total_voltage_mV = 0.0
+
+        self.max_temperature_C = 0.0
+        self.min_temperature_C = 0.0
+        self.average_temperature_C = 0.0
+
+        # latched: once a voltage or temperature fault happens the contactors stay open until reset
+        self.shutdown = False
+
+    # call every sim step. like the real bms it only reads the pack once per sample period,
+    # in between it keeps its last readings (and its faults/flags from them)
+    def updateFromPack(self, battery, dt_s: float) -> None:
+        if self.time_to_next_sample_s < dt_s / 2:
+            self.update(battery.getCellVoltages_mV(), battery.getTemperatures_C(), battery.getShuntCurrent_mA())
+            self.time_to_next_sample_s += self.sample_period_s
+        self.time_to_next_sample_s -= dt_s
+
+    def update(self, battery_voltages_mV: list, battery_temperatures_C: list, battery_current_mA: float) -> None:
+        self.update_voltages(battery_voltages_mV)
+        self.update_temperatures(battery_temperatures_C)
+        self.update_current(battery_current_mA)
+        self.update_shutdown()
+
+    # overpower isn't in here, it's only flagged (the VCU's own algorithm does the power limiting)
+    def update_shutdown(self) -> None:
+        if (self.has_overvoltage_fault() or self.has_undervoltage_fault()
+                or self.has_overtemperature_fault() or self.has_undertemperature_fault()):
+            self.shutdown = True
+
+    def reset_shutdown(self) -> None:
+        self.shutdown = False
+    
+    def update_voltages(self, voltages_mV : list) -> None:
+        self.cell_voltages_mV = voltages_mV.copy()
+        self.update_voltage_metrics()
+        self.update_power()
+
+    def update_temperatures(self, temperatures_C : list) -> None:
+        self.temperatures_C = temperatures_C.copy()
+        self.update_temperature_metrics()
+
+    def update_voltage_metrics(self) -> None:
+        if not self.cell_voltages_mV:
+            return
+
+        self.max_voltage_mV = max(self.cell_voltages_mV)
+        self.min_voltage_mV = min(self.cell_voltages_mV)
+        self.total_voltage_mV = sum(self.cell_voltages_mV)
+        self.average_voltage_mV = (self.total_voltage_mV / len(self.cell_voltages_mV))
+    
+    def update_temperature_metrics(self) -> None:
+        if not self.temperatures_C:
+            return
+
+        self.max_temperature_C = max(self.temperatures_C)
+        self.min_temperature_C = min(self.temperatures_C)
+        self.average_temperature_C = (sum(self.temperatures_C) / len(self.temperatures_C))
+
+    def update_current(self, current_mA: float) -> None:
+        self.current_mA = current_mA
+        self.update_power()
+
+    def update_power(self) -> None:
+        self.power_kW = (self.total_voltage_mV * self.current_mA) / 1000000000.0
+
+    def has_overvoltage_fault(self) -> bool:
+        if not self.cell_voltages_mV:
+            return False
+
+        return (self.max_voltage_mV > self.max_cell_voltage_threshold_mV)
+
+    def has_undervoltage_fault(self) -> bool:
+        if not self.cell_voltages_mV:
+            return False
+
+        return (self.min_voltage_mV < self.min_cell_voltage_threshold_mV)
+
+    def has_overtemperature_fault(self) -> bool:
+        if not self.temperatures_C:
+            return False
+
+        return (self.max_temperature_C > self.max_temp_threshold_C)
+
+    def has_undertemperature_fault(self) -> bool:
+        if not self.temperatures_C:
+            return False
+
+        return (self.min_temperature_C < self.min_temp_threshold_C)
+
+    def has_overpower_fault(self) -> bool:
+        return self.power_kW > self.max_power_threshold_kW
+
+    def getCurrent_mA(self) -> float:
+        return self.current_mA
+    
+    def getVoltages_mV(self) -> list[float]:
+        return self.cell_voltages_mV
+
+    def getTemperatures_C(self) -> list[float]:
+        return self.temperatures_C
+
+    def isShutdown(self) -> bool:
+        return self.shutdown
+

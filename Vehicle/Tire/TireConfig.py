@@ -13,6 +13,9 @@ import numpy
 # Stiffness is either fixed (N per unit slip, N/rad) or per load (multiplied by Fz), not both
 class TireConfig: #TODO: Add parameters related to tire
 
+    model_name = "dugoff" # which tire model this is, MagicFormulaTireConfig is "magic_formula"
+    GRIP_LIMIT_FRACTION = 0.95 # at the grip limit once the tire makes this much of mu Fz
+
     tireSlipRatio = 0.0 # longitudinal slip ratio
     tireSlipAngle = 0.0 # lateral slip angle
     tireDownForce = 0.0 # downward force on the tire
@@ -56,6 +59,23 @@ class TireConfig: #TODO: Add parameters related to tire
         # driving > 0, braking < 0, locked wheel = -1
         self.tireSlipRatio = (wheel_speed - vehicle_speed) / vehicle_speed if vehicle_speed != 0 else 0.0
         return self.tireSlipRatio
+
+    def calculateForces(self, tireDownForce, slip_ratio, slip_angle):
+        # One call for the chassis, every tire model has this so they can be swapped (see MagicFormulaTireConfig)
+        # same order as calling them one by one: slip ratio, slip angle, coupling, then the forces
+        # slip comes in already calculated, the chassis owns the wheel and car speeds (and the low speed fix)
+        self.tireSlipRatio = slip_ratio
+        self.tireSlipAngle = slip_angle
+        self.calculateCoupling(tireDownForce)
+        return self.calculateTireLongitudinalForce(), self.calculateTireLateralForce()
+
+    def isAtGripLimit(self):
+        # At the top of the force curve after the last calculateForces: making 95% of mu Fz or more
+        # (dugoff has no peak, more slip always gives a bit more force, it just levels off at mu Fz)
+        if not self.tireroadfriction or self.tireDownForce <= 0:
+            return False
+        total_force = numpy.hypot(self.tireLongitudinalForce, self.tireLateralForce)
+        return total_force >= self.GRIP_LIMIT_FRACTION * self.tireroadfriction * self.tireDownForce
 
     def calculateTireLongitudinalForce(self):
         # Cx (k) / (1 + k) * f(lambda) where k is the slip ratio/longitudinal slip

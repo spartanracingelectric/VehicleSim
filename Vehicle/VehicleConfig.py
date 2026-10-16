@@ -30,7 +30,8 @@ class VehicleConfig:
     #   pedal -> vcu (runs its own 10 ms loop, holds the request in between)
     #   -> inverter (caps the torque at the motor's max, then current control)
     #   -> motor (small electrical steps) -> inverter dc current -> battery -> bms reads the pack
-    #   -> chassis: motor torque through the gearbox moves the car, which sets the motor speed for next time
+    #   -> chassis: motor torque through the gearbox spins the wheels, the brakes (brake pedal, BPS %) hold them back,
+    #      the tires push the car. the wheels' speed sets the motor speed for next time
     #
     # the 80 kW rule isn't enforced here, the flashed VCU has its own power limiting algorithm.
     # the bms just flags overpower so you can see when a request would break the rule
@@ -40,7 +41,7 @@ class VehicleConfig:
     # TODO: simulate each pair on its own once motors get different requests (torque vectoring)
     #
     # dt_s is the motor's electrical timestep inside the period
-    def update(self, apps_percent, dt_s=5e-6):
+    def update(self, apps_percent, bps_percent=0.0, dt_s=5e-6):
         control_period_s = self.getControlPeriod_s()
         torque_request_Nm = self.vcu.update(apps_percent, control_period_s)
         motor_speed_radps = self.getMotorSpeed_radps()
@@ -55,7 +56,9 @@ class VehicleConfig:
         # voltage/temperature faults latch a shutdown, overpower is only flagged
         self.bms.updateFromPack(self.battery, control_period_s)
 
-        self.chassis.update(self.getWheelForce_N(), self.getMass_kg(), self.tire, control_period_s)
+        self.brake.update(bps_percent)
+        self.chassis.update(self.getWheelTorque_Nm(), self.brake.getFrontWheelTorque_Nm(), self.brake.getRearWheelTorque_Nm(),
+                            self.getDrivelineInertia_kgm2(), self.getMass_kg(), self.tire, control_period_s)
 
         return self.torque_feedback_Nm
 
@@ -100,19 +103,29 @@ class VehicleConfig:
         self.average_copper_loss_W = 0.0
         self.battery.update(0.0, control_period_s)
 
-    # motor torque through the gearbox and tires, all motors together. the chassis caps it at the tires' grip
+    # motor torque through the gearbox, per wheel. every wheel is driven, the motors are shared out evenly
+    # (4 hub motors: one each). the tires turn it into force in the chassis
     # TODO: gearbox losses
-    def getWheelForce_N(self):
-        return self.num_motors * self.torque_feedback_Nm * self.gear_ratio / self.tire.radius_m
+    def getWheelTorque_Nm(self):
+        return self.num_motors * self.torque_feedback_Nm * self.gear_ratio / self.getWheelCount()
+
+    # the motors' rotors spin gear_ratio times faster than the wheel, so each one adds Jm * gear_ratio^2 at the wheel
+    def getDrivelineInertia_kgm2(self):
+        return self.num_motors * self.motor.Jm * self.gear_ratio ** 2 / self.getWheelCount()
+
+    def getWheelCount(self):
+        return 2 * self.chassis.wheels_per_axle
 
     # same as simrunner: car + battery
     # TODO: driver isn't in here (driver1.mass_kg is still a placeholder)
     def getMass_kg(self):
         return self.vehicle_mass_kg + self.battery.mass_kg
 
-    # wheels turn with the car (no slip), motors turn gear_ratio times faster
+    # motors turn gear_ratio times faster than the wheels (which can slip now, so not the car's speed)
+    # one motor is simulated for all of them, so it spins at the front and rear wheels' average
+    # TODO: front and rear motors at their own wheel's speed once each pair is simulated on its own
     def getMotorSpeed_radps(self):
-        return self.chassis.getSpeed_mps() / self.tire.radius_m * self.gear_ratio
+        return self.chassis.getWheelSpeed_radps(self.tire.radius_m) * self.gear_ratio
 
     # one update covers one inverter switching period
     def getControlPeriod_s(self):

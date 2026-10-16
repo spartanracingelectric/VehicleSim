@@ -20,6 +20,7 @@ class Scenario:
     start_speed_kph: float = 0.0
     record_every_s: float = None                    # None = log every tick (100 us), long runs can log less often
     vehicle: object = None                          # None = SR18
+    brake: Callable[[float], float] = None          # time (s) -> brake pedal % (BPS), same shapes as pedal, None = no brakes
 
 def stopWhenBmsShutsDown(vehicle):
     return vehicle.bms.isShutdown()
@@ -34,11 +35,12 @@ def runScenario(scenario):
     for tick in range(round(scenario.run_time_s / control_period_s)):
         time_s = tick * control_period_s
         apps_percent = scenario.pedal(time_s)
-        vehicle.update(apps_percent)
+        bps_percent = scenario.brake(time_s) if scenario.brake is not None else 0.0
+        vehicle.update(apps_percent, bps_percent)
 
         finished = isFinished(scenario, vehicle)
         if tick % record_every == 0 or finished:
-            log.append(readCar(vehicle, tick, time_s, apps_percent))
+            log.append(readCar(vehicle, tick, time_s, apps_percent, bps_percent))
         if finished:
             break
 
@@ -57,6 +59,7 @@ def runScenario(scenario):
     result.bms_sample_period_s = vehicle.bms.sample_period_s
     result.energy_used_kWh = vehicle.battery.discharged_energy_kWh - vehicle.battery.charged_energy_kWh
     result.bms_faults = bmsFaults(vehicle.bms)
+    result.tire_model = vehicle.tire.model_name    # "dugoff" or "magic_formula"
     return result
 
 # a fresh copy of the car (so runs can't change each other), started the way the scenario says
@@ -75,11 +78,16 @@ def isFinished(scenario, vehicle):
     return scenario.stop_when is not None and scenario.stop_when(vehicle)
 
 # everything logged on one tick
-def readCar(vehicle, tick, time_s, apps_percent):
+def readCar(vehicle, tick, time_s, apps_percent, bps_percent=0.0):
     return {
         "tick": tick,
         "time_s": time_s,
         "apps_percent": float(apps_percent),
+        "bps_percent": float(bps_percent),
+        "front_brake_pressure_Pa": vehicle.brake.getFrontPressure_Pa(),
+        "rear_brake_pressure_Pa": vehicle.brake.getRearPressure_Pa(),
+        "front_slip_ratio": vehicle.chassis.getFrontSlipRatio(),
+        "rear_slip_ratio": vehicle.chassis.getRearSlipRatio(),
         "torque_request_Nm": vehicle.vcu.getTorqueRequest_Nm(),
         "torque_command_Nm": vehicle.inverter.getTorqueCommand_Nm(),
         "torque_feedback_Nm": vehicle.getTorqueFeedback_Nm(),
@@ -135,7 +143,7 @@ def summarize(result):
     text = (f"{result.scenario_name}: {result.end_time_s:.2f} s, {result.speed_mps[-1] * 3.6:.0f} km/h, "
             f"{result.distance_m[-1]:.1f} m, peak {np.max(result.pack_power_W) / 1000:.1f} kW, "
             f"used {result.energy_used_kWh:.3f} kWh, SOC {result.soc[0]:.1%} -> {result.soc[-1]:.1%}, "
-            f"pack {result.pack_temp_C[-1]:.1f} C")
+            f"pack {result.pack_temp_C[-1]:.1f} C, {result.tire_model} tires")
     if result.overpower.any():
         text += f", overpower from {result.time_s[np.argmax(result.overpower)]:.2f} s"
     if result.shutdown.any():

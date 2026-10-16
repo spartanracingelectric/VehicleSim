@@ -1,63 +1,44 @@
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))    # repo root, so this also runs as a file or with the run button
+import numpy as np
 import matplotlib.pyplot as plt
-from Vehicle.Tire.Configs.tire1 import tire1
+from Functions.loadConfigs import loadConfigs
 
 # run: python Tests/tireTest.py (or python -m Tests.tireTest from the repo root)
-# (moved here from Vehicle/Tire/Configs/tiretesting2.py, the tire itself is now Configs/tire1.py)
+# every tire in Vehicle/Tire/Configs (dugoff tire1, magic formula tire1_mf, ...) on the same plots:
+# Fx vs slip ratio (straight line) and Fy vs slip angle (cornering), at the TTC fit load
+# (nelson's version plotted TireConfig2's dugoff, tire1 is the new TireConfig dugoff now)
 
 #TODO:
 #get the right coefficients for c_long/lat/tiremu dependent on load
 #Create a for loop on Fz to test tire load sensitivity
-#figure out how to import some stuff from another file for Fz, Vx, Vy, omega, etc
 #split latmu and longmu
 
-kappa, alpha = tire1.calculateslip(
-    Vx = 25, #vehicle speed 25 m/s
-    Vy = 0, #lat velocity (m/s)
-    omega = 64.6, #tire rotation speed (rad/s) (64.6 * 0.4064 = 26.25 m/s)
-    delta = 0.197 #Steer angle (rad) 0.197 rad = 11.3 deg
-)
+FZ_N = 667.0    # the load the TTC data was fit at
 
-kappa_values = [] #initializing indexing for kappa & Fx
-Fx_values = []
-#alpha_values = []
-#Fy_values = []
+def main():
+    tires = vars(loadConfigs("Vehicle.Tire.Configs"))
+    slip_ratios = np.linspace(-1.0, 1.0, 401)
+    slip_angles = np.linspace(-0.5, 0.5, 401)
 
-for i in range(-50,51): 
-    kappa = i/100 #creates kappa from -0.5 to 0.50 with 0.01 steps
-    kappahat, alphahat, shat, Fres, Fx, Fy = tire1.calculateforces(
-        Fz = 667, #667 newtons
-        kappa = kappa, #required to set  for indexing kappa & Fx
-        alpha = 0, #set to 0 for now because straight line iterations
-    )
-    kappa_values.append(kappa)
-    Fx_values.append(Fx)
-    #alpha_values.append(alpha)
-    #Fy_values.append(Fy)
+    fig, (fx_ax, fy_ax) = plt.subplots(1, 2, figsize=(12, 5))
+    for name, tire in sorted(tires.items()):
+        label = f"{name} ({tire.model_name})"
+        fx_ax.plot(slip_ratios, [tire.calculateForces(FZ_N, k, 0.0)[0] for k in slip_ratios], label=label)
+        fy_ax.plot(np.degrees(slip_angles), [tire.calculateForces(FZ_N, 0.0, a)[1] for a in slip_angles], label=label)
 
-print(kappa_values)
+    fx_ax.set_xlabel("Slip Ratio, kappa")
+    fx_ax.set_ylabel("Longitudinal Force, Fx [N]")
+    fx_ax.set_title(f"Fx vs slip ratio, Fz = {FZ_N:.0f} N")
+    fy_ax.set_xlabel("Slip Angle, alpha [deg]")
+    fy_ax.set_ylabel("Lateral Force, Fy [N]")
+    fy_ax.set_title(f"Fy vs slip angle, Fz = {FZ_N:.0f} N")
+    for ax in (fx_ax, fy_ax):
+        ax.grid()
+        ax.legend()
+    fig.tight_layout()
+    plt.show()
 
-
-#plots kappa vs Fx with MATLAB!!
-plt.plot(kappa_values, Fx_values)
-
-plt.xlabel("Slip Ratio, kappa")
-plt.ylabel("Longitudinal Force, Fx [N]")
-plt.title("Dugoff Fx vs Slip Ratio")
-
-plt.grid()
-plt.show()    
-
-#print(tire1.c_lat)
-#print("Fx is",Fx)   
-#print("kappa is", kappa)
-#print("kappahat is", kappahat)
-#print("alpha is", alpha)
-#print("alphahat is", alphahat)
-#print("shat is", shat)
-#print("Fres is", Fres)
-#rint("Fx is", Fx)
-#print("Fy is", Fy)  
-
+if __name__ == "__main__":
+    main()

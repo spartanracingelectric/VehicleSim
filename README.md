@@ -65,6 +65,8 @@ from copy import deepcopy
 from Vehicle.MainConfigs.SR18 import SR18
 car = deepcopy(SR18)
 car.update(apps_percent=100)                 # one 100 us step
+car.advance(0.01, apps_percent=100)          # 10 ms (100 steps)
+car.advance(0.01, torque_request_Nm=16.8)    # 10 ms with the torque decided outside, e.g. by the real VCU firmware
 ```
 
 SRE-VCU's SIL container installs it from GitHub (the `VehSim-1` branch) every time it starts, so changes here

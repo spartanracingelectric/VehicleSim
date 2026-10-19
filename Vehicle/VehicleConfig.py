@@ -39,17 +39,22 @@ class VehicleConfig:
     # and its dc current is multiplied by num_motors for the battery
     # TODO: simulate each pair on its own once motors get different requests (torque vectoring)
     #
-    # dt_s is the motor's electrical timestep inside the period
-    def update(self, apps_percent, dt_s=5e-6):
+    # dt_s is the motor's electrical timestep inside the period.
+    # torque_request_Nm or current_request_A (per motor) skip the car's own vcu, for when something else decides,
+    # e.g. the real VCU firmware in a SIL test (vcu.getTorqueRequest_Nm() then isn't updated):
+    #   torque_request_Nm: the inverters are told a torque
+    #   current_request_A: the inverters are told a current (A peak, like a VESC's set-current), see InverterConfig
+    def update(self, apps_percent=0.0, dt_s=5e-6, torque_request_Nm=None, current_request_A=None):
         control_period_s = self.getControlPeriod_s()
-        torque_request_Nm = self.vcu.update(apps_percent, control_period_s)
+        if torque_request_Nm is None and current_request_A is None:
+            torque_request_Nm = self.vcu.update(apps_percent, control_period_s)
         motor_speed_radps = self.getMotorSpeed_radps()
 
         # a bms shutdown from an earlier period keeps the contactors open
         if self.bms.isShutdown():
             self.updateContactorsOpen(motor_speed_radps)
         else:
-            self.updateDriving(torque_request_Nm, motor_speed_radps, dt_s)
+            self.updateDriving(torque_request_Nm, motor_speed_radps, dt_s, current_request_A)
 
         # bms reads the pack once per its own sample period (bms.sample_period_s, 50 ms), not every tick:
         # voltage/temperature faults latch a shutdown, overpower is only flagged
@@ -59,7 +64,15 @@ class VehicleConfig:
 
         return self.torque_feedback_Nm
 
-    def updateDriving(self, torque_request_Nm, motor_speed_radps, dt_s):
+    # runs the car for duration_s: as many updates (inverter switching periods, 100 us) as fit, e.g. 100 for
+    # one 10 ms VCU loop. same arguments as update(), held for the whole time
+    def advance(self, duration_s, apps_percent=0.0, torque_request_Nm=None, current_request_A=None):
+        # round, not int: 0.01 / 0.0001 is 99.99999999999999 in floating point
+        for _ in range(round(duration_s / self.getControlPeriod_s())):
+            self.update(apps_percent, torque_request_Nm=torque_request_Nm, current_request_A=current_request_A)
+        return self.torque_feedback_Nm
+
+    def updateDriving(self, torque_request_Nm, motor_speed_radps, dt_s, current_request_A=None):
         control_period_s = self.getControlPeriod_s()
         steps_per_control_period = round(control_period_s / dt_s)
         if steps_per_control_period < 1:
@@ -67,7 +80,8 @@ class VehicleConfig:
 
         bus_voltage_V = self.battery.terminal_voltage_V
         self.motor.set_wm(motor_speed_radps)
-        self.inverter.updateCurrentControl(torque_request_Nm, self.motor, bus_voltage_V, control_period_s)
+        self.inverter.updateCurrentControl(torque_request_Nm, self.motor, bus_voltage_V, control_period_s,
+                                           current_request_A)
 
         # motor runs in small steps while the inverter holds its voltages for the period
         torque_sum_Nm = 0.0

@@ -36,7 +36,7 @@ def runScenario(scenario):
         time_s = tick * control_period_s
         apps_percent = scenario.pedal(time_s)
         bps_percent = scenario.brake(time_s) if scenario.brake is not None else 0.0
-        vehicle.update(apps_percent, bps_percent)
+        vehicle.update(apps_percent, bps_percent=bps_percent)
 
         finished = isFinished(scenario, vehicle)
         if tick % record_every == 0 or finished:

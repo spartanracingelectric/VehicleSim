@@ -153,27 +153,35 @@ class InverterConfig:
     # reads the motor's currents, speed and angle, like the real inverter reads its current sensors and resolver
     # uses the motor's Ld, Lq, lambda_f and poles for the feedforward, like a real inverter's motor setup
     # call once per switching period
-    def updateCurrentControl(self, torque_request_Nm, motor, bus_voltage_V, control_period_s):
-        # won't ask the motor for more torque than it can make
-        self.torque_command_Nm = max(-motor.peakTorque_Nm, min(torque_request_Nm, motor.peakTorque_Nm))
-
-        # speed limit: fades driving torque out over the last 2% before the motor's max speed
-        speed_rpm = abs(motor.wm) * 60 / (2 * math.pi)
-        if motor.maxSpeed_rpm is not None and self.torque_command_Nm * motor.wm > 0:
-            fade = (motor.maxSpeed_rpm - speed_rpm) / (0.02 * motor.maxSpeed_rpm)
-            self.torque_command_Nm *= max(0.0, min(fade, 1.0))
-
+    # Told either a torque or a current, per motor:
+    #   torque_request_Nm  (like the AMK inverter): capped at the motor's max, turned into the iq that makes it
+    #   current_request_A  (like a VESC's set-current, A peak): that's the iq target, the torque is whatever it makes.
+    #                      torque_request_Nm is ignored then
+    # after that, both run the same current loop
+    def updateCurrentControl(self, torque_request_Nm, motor, bus_voltage_V, control_period_s, current_request_A=None):
         # field weakening: if last period's voltage command got near what the bus can make, push id negative.
         # that cancels some of the magnet's flux (less back-emf) so there's voltage left to make torque
         headroom_V = self.field_weakening_start * self.getMaxVoltage_V(bus_voltage_V) - self.voltage_command_V
         self.field_weakening_controller.output_min = -motor.fieldWeakeningCurrent_A
         self.id_desired_A = self.field_weakening_controller.update(headroom_V, control_period_s)
 
-        # torque -> iq, counting the reluctance torque from that id, then keep the total current under the motor's max
-        self.iq_desired_A = motor.find_iq_desired(self.torque_command_Nm, self.id_desired_A)
+        if current_request_A is None:
+            # won't ask the motor for more torque than it can make, then torque -> iq, counting the reluctance
+            # torque from that id
+            self.torque_command_Nm = max(-motor.peakTorque_Nm, min(torque_request_Nm, motor.peakTorque_Nm))
+            self.torque_command_Nm *= self.getSpeedFade(motor, self.torque_command_Nm)
+            self.iq_desired_A = motor.find_iq_desired(self.torque_command_Nm, self.id_desired_A)
+        else:
+            self.iq_desired_A = current_request_A * self.getSpeedFade(motor, current_request_A)
+
+        # keep the total current under the motor's max
         if motor.maxCurrent_A is not None:
             iq_max_A = math.sqrt(max(motor.maxCurrent_A ** 2 - self.id_desired_A ** 2, 0.0))
             self.iq_desired_A = max(-iq_max_A, min(self.iq_desired_A, iq_max_A))
+
+        # told a current: the torque command is what that current makes (for the record)
+        if current_request_A is not None:
+            self.torque_command_Nm = self.iq_desired_A / motor.find_iq_desired(1.0, self.id_desired_A)
 
         id_A, iq_A = self.takeMeasuredCurrents_A(motor)
         error_d_A = self.id_desired_A - id_A
@@ -211,6 +219,15 @@ class InverterConfig:
         self.q_current_controller.updateState(error_q_A, control_period_s, integrate=not self.voltage_saturated)
 
         return self.phase_voltages_V
+
+    # speed limit: 1 normally, fading to 0 over the last 2% before the motor's max speed while driving
+    # (request pushing the way the motor spins). braking isn't faded
+    def getSpeedFade(self, motor, request):
+        if motor.maxSpeed_rpm is None or request * motor.wm <= 0:
+            return 1.0
+        speed_rpm = abs(motor.wm) * 60 / (2 * math.pi)
+        fade = (motor.maxSpeed_rpm - speed_rpm) / (0.02 * motor.maxSpeed_rpm)
+        return max(0.0, min(fade, 1.0))
 
     # contactors open, so there's no dc bus: the inverter can't drive anything.
     # clears its outputs and the controllers' memory so it starts fresh if the bus comes back

@@ -35,10 +35,21 @@ SATURATION_TEST = SimpleNamespace(
     initial_soc=0.3,
 )
 
+# the inverter told a current instead of a torque, like a VESC's set-current (what the VCU firmware sends):
+# motoring, the firmware's full-pedal 76.3 A, then regen
+CURRENT_TEST = SimpleNamespace(
+    name="current steps at 6000 rpm",
+    speed_rpm=6000.0,
+    duration_s=0.06,
+    current_steps=[(0.0, 0.0), (0.005, 40.0), (0.025, 76.3), (0.045, -30.0)],
+    initial_soc=0.9,
+)
+
 def main():
     step_result = simulate(STEP_TEST)
     checkTorqueSteps(step_result)
     checkVoltageLimit(simulate(SATURATION_TEST))
+    checkCurrentSteps(simulate(CURRENT_TEST))
     print("All motor + inverter checks passed")
     plotDrive(
         step_result.time_s,
@@ -58,12 +69,16 @@ def main():
         step_result.name,
     )
 
-def getTorqueRequest(scenario, time_s):
-    torque_Nm = 0.0
-    for step_time_s, step_torque_Nm in scenario.torque_steps:
+# a scenario steps either the torque request or the current request
+def getSteps(scenario):
+    return scenario.current_steps if hasattr(scenario, "current_steps") else scenario.torque_steps
+
+def getRequest(scenario, time_s):
+    request = 0.0
+    for step_time_s, step_request in getSteps(scenario):
         if time_s >= step_time_s:
-            torque_Nm = step_torque_Nm
-    return torque_Nm
+            request = step_request
+    return request
 
 def simulate(scenario):
     inverter = deepcopy(inverter1)
@@ -91,9 +106,14 @@ def simulate(scenario):
 
         # inverter's current controller runs once per switching period
         if step % steps_per_control_period == 0:
-            torque_request_Nm = getTorqueRequest(scenario, t)
             max_voltage_V = inverter.getMaxVoltage_V(bus_voltage_V)
-            inverter.updateCurrentControl(torque_request_Nm, motor, bus_voltage_V, control_period_s)
+            if hasattr(scenario, "current_steps"):
+                inverter.updateCurrentControl(None, motor, bus_voltage_V, control_period_s,
+                                              current_request_A=getRequest(scenario, t))
+                torque_request_Nm = inverter.getTorqueCommand_Nm()    # what that current makes
+            else:
+                torque_request_Nm = getRequest(scenario, t)
+                inverter.updateCurrentControl(torque_request_Nm, motor, bus_voltage_V, control_period_s)
 
         # the phase voltages the inverter is holding go onto the motor, which works out what its rotor sees
         id_A, iq_A, Te, _, _, Pe = motor.update_from_phase_voltages(inverter.getPhaseVoltages_V(), DT_S, wm=speed_radps)
@@ -125,7 +145,7 @@ def simulate(scenario):
 
 # last 2 ms before each torque step changes, when things have settled
 def getSettledWindows(scenario, result):
-    end_times_s = [step_time_s for step_time_s, _ in scenario.torque_steps[1:]] + [scenario.duration_s]
+    end_times_s = [step_time_s for step_time_s, _ in getSteps(scenario)[1:]] + [scenario.duration_s]
     return [(result.time_s > end_s - 0.002) & (result.time_s < end_s) for end_s in end_times_s]
 
 def checkTorqueSteps(result):
@@ -180,6 +200,24 @@ def checkVoltageLimit(result):
     print(f"{request_Nm:.0f} Nm request at {SATURATION_TEST.speed_rpm:.0f} rpm -> {torque_Nm:.2f} Nm, "
           f"voltage {np.mean(result.voltage_magnitude_V[window]):.1f} V = limit {np.mean(result.max_voltage_V[window]):.1f} V, "
           f"field weakening id {id_A:.1f} A")
+
+# told a current: iq settles on it (not the torque), and the torque is what that current makes.
+# no field weakening at 6000 rpm, so that's iq times the motor's torque per amp
+def checkCurrentSteps(result):
+    assert not result.saturated.any(), "should stay under the voltage limit"
+    Nm_per_A = 1 / amk_dd5.find_iq_desired(1.0)
+
+    for window in getSettledWindows(CURRENT_TEST, result):
+        command_A = result.iq_desired_A[window][-1]
+        iq_A = np.mean(result.iq_A[window])
+        torque_Nm = np.mean(result.torque_Nm[window])
+        id_A = np.mean(result.id_A[window])
+
+        assert abs(iq_A - command_A) < 0.02 * abs(command_A) + 0.5, f"iq {iq_A:.2f} A, commanded {command_A} A"
+        assert abs(torque_Nm - Nm_per_A * command_A) < 0.02 * abs(Nm_per_A * command_A) + 0.05
+        assert abs(id_A) < 2.0
+        print(f"{command_A:6.1f} A request -> iq {iq_A:6.2f} A, {torque_Nm:6.2f} Nm "
+              f"(= {Nm_per_A:.4f} Nm/A x {command_A:.1f} A), id {id_A:+.2f} A")
 
 if __name__ == "__main__":
     main()

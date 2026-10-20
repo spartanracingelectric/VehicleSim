@@ -1,8 +1,8 @@
 class VehicleConfig:
     # num_motors: how many motor + inverter pairs share the battery (each motor has its own inverter)
     # gear_ratio: motor turns per wheel turn (wheel torque = motor torque * gear_ratio)
-    def __init__(self, vehicle_mass_kg, axel, battery, bms, brake, chassis, driver, inverter, motor, tire,
-                 vcu=None, num_motors=1, gear_ratio=1.0):
+    def __init__(self, vehicle_mass_kg, axel, battery, bms, brake, chassis, driver, inverters, motors, tire,
+                 vcu=None, num_motors=4, gear_ratio=1.0):
         self.vehicle_mass_kg = vehicle_mass_kg
         self.axel = axel
         self.battery = battery
@@ -10,8 +10,8 @@ class VehicleConfig:
         self.brake = brake
         self.chassis = chassis
         self.driver = driver
-        self.inverter = inverter
-        self.motor = motor
+        self.inverters = list(inverters)
+        self.motors = list(motors) # gets 4 motors: front left, front right, rear left, rear right
         self.tire = tire
         self.vcu = vcu
         self.num_motors = num_motors
@@ -23,8 +23,8 @@ class VehicleConfig:
         # vcu.torque_request_Nm, inverter.torque_command_Nm, battery.current_A, battery.terminal_power_W,
         # chassis.speed_mps
         # torque request / command / feedback line up with the log's MCM Torque Command / Commanded Torque / Torque Feedback
-        self.torque_feedback_Nm = 0.0    # what the motor actually made (its Te)
-        self.average_copper_loss_W = 0.0
+        self.torque_feedback_Nm: list[float] = [0.0] * self.num_motors   # what the motor actually made (its Te)
+        self.average_copper_loss_W: list[float] = [0.0] * self.num_motors
 
     # One update = one inverter switching period:
     #   pedal -> vcu (runs its own 10 ms loop, holds the request in between)
@@ -79,45 +79,54 @@ class VehicleConfig:
             raise ValueError("Motor timestep must be shorter than the inverter switching period")
 
         bus_voltage_V = self.battery.terminal_voltage_V
-        self.motor.set_wm(motor_speed_radps)
-        self.inverter.updateCurrentControl(torque_request_Nm, self.motor, bus_voltage_V, control_period_s,
+        pack_current_A = 0.0
+
+        for i in range(self.num_motors):
+            self.motors[i].set_wm(motor_speed_radps)
+            self.inverters[i].updateCurrentControl(torque_request_Nm, self.motors[i], bus_voltage_V, control_period_s,
                                            current_request_A)
 
-        # motor runs in small steps while the inverter holds its voltages for the period
-        torque_sum_Nm = 0.0
-        copper_loss_sum_W = 0.0
-        dc_current_sum_A = 0.0
-        for _ in range(steps_per_control_period):
-            # the car sets the motor's speed (through the wheels and gearbox)
-            _, _, Te, _, _, Pe = self.motor.update_from_phase_voltages(self.inverter.getPhaseVoltages_V(), dt_s, wm=motor_speed_radps)
-            self.inverter.measureCurrents(self.motor.id, self.motor.iq)
-            self.inverter.updatePower(Pe, bus_voltage_V)
+            # motor runs in small steps while the inverter holds its voltages for the period
+        
+            torque_sum_Nm = 0.0
+            copper_loss_sum_W = 0.0
+            dc_current_sum_A = 0.0
 
-            torque_sum_Nm += Te
-            copper_loss_sum_W += self.motor.P_copper
-            dc_current_sum_A += self.inverter.getDcCurrent_A()
+            for _ in range(steps_per_control_period):
+                # the car sets the motor's speed (through the wheels and gearbox)
+                _, _, Te, _, _, Pe = self.motors[i].update_from_phase_voltages(self.inverters[i].getPhaseVoltages_V(), dt_s, wm=motor_speed_radps)
+                self.inverters[i].measureCurrents(self.motors[i].id, self.motors[i].iq)
+                self.inverters[i].updatePower(Pe, bus_voltage_V)
 
-        self.torque_feedback_Nm = torque_sum_Nm / steps_per_control_period
-        self.average_copper_loss_W = copper_loss_sum_W / steps_per_control_period
+                torque_sum_Nm += Te
+                copper_loss_sum_W += self.motors[i].P_copper
+                dc_current_sum_A += self.inverters[i].getDcCurrent_A()
 
-        # the battery sees every inverter's dc current, averaged over the period
-        pack_current_A = self.num_motors * dc_current_sum_A / steps_per_control_period
+            self.torque_feedback_Nm[i] = torque_sum_Nm / steps_per_control_period
+            self.average_copper_loss_W[i] = copper_loss_sum_W / steps_per_control_period
+
+            # the battery sees every inverter's dc current, averaged over the period
+            pack_current_A += dc_current_sum_A / steps_per_control_period
         self.battery.update(pack_current_A, control_period_s)
 
     # contactors open: no dc bus, so the inverters can't drive any current and the motors just spin with the car
     def updateContactorsOpen(self, motor_speed_radps):
         control_period_s = self.getControlPeriod_s()
-        self.motor.turnOff(control_period_s, wm=motor_speed_radps)
-        self.inverter.turnOff()
+        for i in range(self.num_motors):
+            self.motors[i].turnOff(control_period_s, wm=motor_speed_radps)
+            self.inverters[i].turnOff()
 
-        self.torque_feedback_Nm = 0.0
-        self.average_copper_loss_W = 0.0
+            self.torque_feedback_Nm[i] = 0.0
+            self.average_copper_loss_W[i] = 0.0
         self.battery.update(0.0, control_period_s)
 
     # motor torque through the gearbox and tires, all motors together. the chassis caps it at the tires' grip
     # TODO: gearbox losses
     def getWheelForce_N(self):
-        return self.num_motors * self.torque_feedback_Nm * self.gear_ratio / self.tire.radius_m
+        totalWheelForce = 0.0
+        for i in range(self.num_motors):
+            totalWheelForce += self.torque_feedback_Nm[i] * self.gear_ratio / self.tire.radius_m
+        return totalWheelForce
 
     # same as simrunner: car + battery
     # TODO: driver isn't in here (driver1.mass_kg is still a placeholder)
@@ -129,8 +138,9 @@ class VehicleConfig:
         return self.chassis.getSpeed_mps() / self.tire.radius_m * self.gear_ratio
 
     # one update covers one inverter switching period
+    # assuming control period is same for all inverters, so it uses first inverter
     def getControlPeriod_s(self):
-        return self.inverter.switching_period_s
+        return self.inverters[0].switching_period_s
 
     # what the motor actually made: its Te, per motor, averaged over the update
     def getTorqueFeedback_Nm(self):

@@ -24,4 +24,15 @@ amk_dd5 = MotorConfig(
     maxCurrent_Arms = 105.0, #for up to 1.24 s, continuous stall current is 53.1
     maxSpeed_rpm = 20000.0, #mechanical speed limit
     fieldWeakeningCurrent_Arms = 35.0, #"magn. current Im", how far id can go negative for field weakening
+    # winding temperature, one node. datasheet duty "S1 dT=100K": at the continuous stall current (53.1 Arms)
+    # the windings settle 100 K over the coolant. copper loss there = 3 * Rs * I^2 = 3 * 0.0675 * 53.1^2 = 571 W
+    # (at stall, so no core loss in that rating), so Rth = 100 / 571.
+    # Rs is fixed in this model: if Rs ever rises with temperature, this has to drop to ~0.126
+    # (the same 53.1 A makes ~794 W once the copper is at 125 C)
+    thermalResistance_KperW = 0.175, #windings -> coolant (K/W)
+    # PLACEHOLDER, not on the datasheet: a guess from the copper and stator iron in a 3.55 kg motor
+    # (somewhere in 200-800 J/K), gives a 70 s time constant. fit it from a dyno heat-up or a log
+    # with the inverter's motor temperature (KTY84): time to 63% of the rise = Rth * Cth
+    heatCapacity_JperK = 400.0, #(J/K)
+    coolantTemp_C = 25.0, #coolant going into the motor (C)
 )

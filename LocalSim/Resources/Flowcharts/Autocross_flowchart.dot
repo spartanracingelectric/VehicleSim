@@ -1,0 +1,64 @@
+digraph Autocross {
+    rankdir=TB;
+    fontname="Helvetica";
+    label="Autocross.py — simulate_lap()";
+    labelloc="t";
+    fontsize=20;
+    fontcolor="#222222";
+    splines=spline;
+    nodesep=0.3;
+    ranksep=0.3;
+    bgcolor="white";
+    ratio=0.8;
+
+    node [fontname="Helvetica", fontsize=11, style="filled,rounded", shape=box, penwidth=1.1, color="#333333"];
+    edge [fontname="Helvetica", fontsize=10, color="#333333", penwidth=1.2];
+
+    // ---------------- INPUTS ----------------
+    subgraph cluster_inputs {
+        label="INPUTS";
+        style="dashed"; color="#999999"; fontcolor="#777777"; fontsize=13; labeljust=l;
+        car [label="car: SR_17 or SR_18 instance\n(one at a time, per the cars loop below)", fillcolor="#dbe9f6"];
+        track [label="track_centerline.csv\n(digitized real track outline, ft)", fillcolor="#dbe9f6"];
+    }
+
+    // ---------------- MAIN PIPELINE ----------------
+    subgraph cluster_pipeline {
+        label="simulate_lap()";
+        style="dashed"; color="#999999"; fontcolor="#777777"; fontsize=13; labeljust=l;
+
+        load [label="load_track()\nft → m, compute closed-loop perimeter\n→ uniform waypoint spacing ds", fillcolor="#fdf1d6"];
+        curvature [label="path_curvature(x, y)\nsigned curvature via finite differences,\npadded across the start/finish seam\n→ kappa(s) per waypoint", fillcolor="#fdf1d6"];
+        radius [label="radius = clip(1/abs(kappa), 3, 5000) m\nper waypoint", fillcolor="#fdf1d6"];
+        vcorner [label="max_corner_speed_bisect() per waypoint\nbisection on Skidpad.corner_speed_feasible\n→ v_corner steady-state cornering cap", fillcolor="#fdf1d6"];
+        fwd [label="Forward pass (×3 rounds, closed loop)\nv[i] capped by accel from v[i-1]\n(max_accel, wraps via modulo n)", fillcolor="#fdf1d6"];
+        bwd [label="Backward pass (×3 rounds, closed loop)\nv[i] capped by braking need from v[i+1]\n(max_decel, wraps via modulo n)", fillcolor="#fdf1d6"];
+        laptime [label="dt = ds / v_avg per waypoint\nlap_time = sum(dt)", fillcolor="#fdf1d6"];
+
+        load -> curvature -> radius -> vcorner -> fwd -> bwd -> laptime;
+    }
+
+    car -> vcorner;
+    track -> load;
+
+    // ---------------- OUTPUTS ----------------
+    subgraph cluster_outputs {
+        label="OUTPUTS (per car)";
+        style="dashed"; color="#999999"; fontcolor="#777777"; fontsize=13; labeljust=l;
+        printed [label="Printed: track length, lap time,\ntop speed, min corner speed", fillcolor="#dcf0dc"];
+        plot [label="Save speed trace + track-map plot\n{car}_Autocross_lap_speed.png", fillcolor="#dcf0dc"];
+        printed -> plot;
+    }
+
+    laptime -> printed;
+
+    // ---------------- POWER SWEEP ----------------
+    subgraph cluster_sweep {
+        label="POST-RUN SWEEP (per car)";
+        style="dashed"; color="#999999"; fontcolor="#777777"; fontsize=13; labeljust=l;
+        sweep [label="Sweep power_limit 10→90 kW\n(full re-run each point via simulate_lap)\n→ Lap Time vs. Power PNG", fillcolor="#dcf0dc"];
+    }
+
+    plot -> sweep;
+    sweep -> car [label="next car", constraint=false];
+}

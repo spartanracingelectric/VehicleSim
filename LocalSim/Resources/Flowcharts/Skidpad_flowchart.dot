@@ -1,0 +1,64 @@
+digraph Skidpad {
+    rankdir=TB;
+    fontname="Helvetica";
+    label="Skidpad.py — simulate_skidpad_run()";
+    labelloc="t";
+    fontsize=20;
+    fontcolor="#222222";
+    splines=spline;
+    nodesep=0.3;
+    ranksep=0.3;
+    bgcolor="white";
+    ratio=0.8;
+
+    node [fontname="Helvetica", fontsize=11, style="filled,rounded", shape=box, penwidth=1.1, color="#333333"];
+    edge [fontname="Helvetica", fontsize=10, color="#333333", penwidth=1.2];
+
+    // ---------------- INPUTS ----------------
+    subgraph cluster_inputs {
+        label="INPUTS";
+        style="dashed"; color="#999999"; fontcolor="#777777"; fontsize=13; labeljust=l;
+        car [label="car: SR_17 or SR_18 instance\n(one at a time, per the cars loop below)", fillcolor="#dbe9f6"];
+        geom [label="D.10.1 course geometry constants\nCENTER_SPACING, INNER/OUTER_DIAMETER,\nPATH_RADIUS, GATE_STRAIGHT_LENGTH", fillcolor="#dbe9f6"];
+    }
+
+    // ---------------- MAIN PIPELINE ----------------
+    subgraph cluster_pipeline {
+        label="simulate_skidpad_run()";
+        style="dashed"; color="#999999"; fontcolor="#777777"; fontsize=13; labeljust=l;
+
+        build_path [label="build_skidpad_path()\nentry gate → right lap1 (untimed) → right lap2 (timed)\n→ left lap3 (untimed) → left lap4 (timed) → exit gate\n→ x, y, radius, ds_arr, bounds", fillcolor="#fdf1d6"];
+        solve_aero [label="solve_circle_speed_with_yaw_aero()\nfixed-point loop (5 iters): YawPlane body slip angle β\n↔ aero-derated circle corner speed\n→ v_corner_circle, aero_yaw_derate, body_slip_deg", fillcolor="#fdf1d6"];
+        broadcast [label="Broadcast v_corner & derate per waypoint\n(circle radius vs. straight-gate radius)", fillcolor="#fdf1d6"];
+        fwd [label="Forward pass (×3 rounds)\nv[i] capped by standing-start accel from v[i-1]\n(max_accel, aero-derated)", fillcolor="#fdf1d6"];
+        bwd [label="Backward pass (×3 rounds)\nv[i] capped by braking need from v[i+1]\n(max_decel, aero-derated)", fillcolor="#fdf1d6"];
+        laptimes [label="Compute right_lap_time, left_lap_time,\ncorrected_time (D.10.4), total_time, max_speed", fillcolor="#fdf1d6"];
+
+        build_path -> solve_aero -> broadcast -> fwd -> bwd -> laptimes;
+    }
+
+    car -> build_path;
+    geom -> build_path;
+
+    // ---------------- OUTPUTS ----------------
+    subgraph cluster_outputs {
+        label="OUTPUTS (per car)";
+        style="dashed"; color="#999999"; fontcolor="#777777"; fontsize=13; labeljust=l;
+        printed [label="Printed: lap times, corrected time,\ntotal time, max speed, body slip angle,\naero yaw derate", fillcolor="#dcf0dc"];
+        crosscheck [label="Yaw-plane cross-check\nmax_corner_speed_yaw_plane() vs. the axle-split\nsteady-state circle speed", fillcolor="#dcf0dc"];
+        speedplot [label="Save speed trace + course-map plot\n{car}_Skidpad_speed.png", fillcolor="#dcf0dc"];
+        printed -> crosscheck -> speedplot;
+    }
+
+    laptimes -> printed;
+
+    // ---------------- PSI SWEEP ----------------
+    subgraph cluster_sweep {
+        label="POST-RUN SWEEP (per car)";
+        style="dashed"; color="#999999"; fontcolor="#777777"; fontsize=13; labeljust=l;
+        psisweep [label="Sweep tire_pressure_psi 7→12 psi\n(re-instantiate car + re-run\nsimulate_skidpad_run per point)\n→ Corrected Time vs. psi PNG", fillcolor="#dcf0dc"];
+    }
+
+    speedplot -> psisweep;
+    psisweep -> car [label="next car", constraint=false];
+}

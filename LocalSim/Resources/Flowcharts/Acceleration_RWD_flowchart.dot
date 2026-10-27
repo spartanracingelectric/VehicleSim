@@ -1,0 +1,84 @@
+digraph AccelRWD {
+    rankdir=TB;
+    fontname="Helvetica";
+    label="Acceleration_RWD.py — simulate_75m_accel()";
+    labelloc="t";
+    fontsize=20;
+    fontcolor="#222222";
+    splines=spline;
+    nodesep=0.35;
+    ranksep=0.35;
+    bgcolor="white";
+
+    node [fontname="Helvetica", fontsize=11, style="filled,rounded", shape=box, penwidth=1.1, color="#333333"];
+    edge [fontname="Helvetica", fontsize=10, color="#333333", penwidth=1.2];
+
+    // ---------------- INPUTS ----------------
+    subgraph cluster_inputs {
+        label="INPUTS";
+        style="dashed"; color="#999999"; fontcolor="#777777"; fontsize=13; labeljust=l;
+        car [label="car: SR_17 instance\nmass, geometry, spring/damper rates,\nmotor torque curve, Pacejka tire model,\naero coeffs, drivetrain params,\nlaunch-control settings", fillcolor="#dbe9f6"];
+        params [label="target_distance = 75 m\ndt = 0.0005 s", fillcolor="#dbe9f6"];
+    }
+
+    init [label="Initialize state\nt=0, x=0, v=2.333 m/s (0.3 m rolling start)\nω_wheel, ω_motor_side, θ_twist = 0\nsuspension states z_f, z_r = 0", fillcolor="#dbe9f6"];
+    decision [label="x < 75 m ?", shape=diamond, fillcolor="#f6dbdb", fontsize=11];
+
+    car -> init;
+    params -> init;
+    init -> decision;
+
+    // ---------------- LOOP ----------------
+    subgraph cluster_loop {
+        label="PER-TIMESTEP PHYSICS LOOP";
+        style="dashed"; color="#999999"; fontcolor="#777777"; fontsize=13; labeljust=l;
+
+        aero [label="Aero forces\nf_drag, f_down from v²", fillcolor="#fdf1d6"];
+        transfer [label="Weight-transfer target per axle\n(anti-squat/lift/dive, by sign of a)", fillcolor="#fdf1d6"];
+        susp [label="Integrate axle spring/damper ODE\n→ dynamic Fz_front, Fz_rear", fillcolor="#fdf1d6"];
+        fz [label="Fz_front, Fz_rear =\nstatic + dynamic + aero (clamped ≥ 0)", fillcolor="#fdf1d6"];
+        slip [label="slip ratio per rear wheel = f(ω_wheel, v)", fillcolor="#fdf1d6"];
+        tire [label="Pacejka tire model, per rear wheel\nf_traction = sum of RL + RR", fillcolor="#fdf1d6"];
+        rpm [label="motor_rpm from ω_motor_side × final_drive_ratio", fillcolor="#fdf1d6"];
+        torque [label="Motor torque curve × throttle_request", fillcolor="#fdf1d6"];
+        plimit [label="Cap torque × speed at power_limit", fillcolor="#fdf1d6"];
+        launch [label="launch control on\nand slip > target?", shape=diamond, fillcolor="#f6dbdb", fontsize=10];
+        backoff [label="Reduce torque command\nproportional to slip error", fillcolor="#fdf1d6"];
+        driveline [label="Driveline ODE: motor inertia → diff\n→ 2 half-shafts → 2 rear wheels\n(locked diff by default; open optional)", fillcolor="#fdf1d6"];
+        rr [label="Rolling resistance f_rr\n= crr × (weight + downforce)", fillcolor="#fdf1d6"];
+        accel [label="a = (f_traction − f_drag − f_rr) / m_eff", fillcolor="#fdf1d6"];
+        euler [label="Semi-implicit Euler integrate:\nv, x, t, driveline states, suspension states", fillcolor="#fdf1d6"];
+        logstep [label="Log t, x, v, a, rpm, slip, Fz_front, Fz_rear", fillcolor="#fdf1d6"];
+
+        aero -> transfer -> susp -> fz -> slip -> tire -> rpm -> torque -> plimit -> launch;
+        launch -> backoff [label="yes"];
+        launch -> driveline [label="no"];
+        backoff -> driveline;
+        driveline -> rr -> accel -> euler -> logstep;
+    }
+
+    decision -> aero [label="yes"];
+    logstep -> decision [label="next timestep", constraint=false];
+
+    // ---------------- OUTPUTS ----------------
+    subgraph cluster_outputs {
+        label="OUTPUTS";
+        style="dashed"; color="#999999"; fontcolor="#777777"; fontsize=13; labeljust=l;
+        result [label="elapsed_time (75 m ET)\nsim_log: full time-series\n(v, a, rpm, slip, Fz per axle)", fillcolor="#dcf0dc"];
+        printed [label="Printed:\nElapsed Time, Trap Speed,\nMax Accel (g), Max Slip (%)", fillcolor="#dcf0dc"];
+        result -> printed;
+    }
+
+    decision -> result [label="no, x ≥ 75 m"];
+
+    // ---------------- SWEEPS ----------------
+    subgraph cluster_sweeps {
+        label="POST-RUN SWEEPS";
+        style="dashed"; color="#999999"; fontcolor="#777777"; fontsize=13; labeljust=l;
+        sweep1 [label="Sweep final_drive_ratio 2.0→7.0\n(full re-run each step)\n→ 75m time vs. ratio PNG", fillcolor="#dcf0dc"];
+        sweep2 [label="Sweep target_slip_ratio 0.05→1.0\n(launch control forced on)\n→ 75m time vs. slip PNG", fillcolor="#dcf0dc"];
+        sweep1 -> sweep2;
+    }
+
+    printed -> sweep1;
+}

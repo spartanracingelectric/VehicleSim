@@ -61,7 +61,8 @@ class VehicleConfig:
         # voltage/temperature faults latch a shutdown, overpower is only flagged
         self.bms.updateFromPack(self.battery, control_period_s)
 
-        self.brake.update(bps_percent)
+        # negative motor torque is regen braking: the friction brakes only make up the rest of the pedal
+        self.brake.update(bps_percent, regen_torque_Nm=max(0.0, -self.getWheelTorque_Nm()))
         self.chassis.update(self.getWheelTorque_Nm(), self.brake.getFrontWheelTorque_Nm(), self.brake.getRearWheelTorque_Nm(),
                             self.getDrivelineInertia_kgm2(), self.getMass_kg(), self.tire, control_period_s)
 

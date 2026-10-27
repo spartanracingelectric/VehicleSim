@@ -40,3 +40,43 @@ still todo
 real brake numbers, check the chassis numbers for SR18, fit C and E for magic formula, decide on mu, and the per axle motors / traction control thing.
 
 to run it: pytest Tests -q for everything, pytest Tests/scenarioTest.py -v for seong's scenarios, python Tests/tireTest.py to plot both tire curves.
+
+
+---------------------------------------------------------------------------------------------------
+journal entry: regen braking hook (2026-10-26)
+
+why
+the regen person on the team wants to know how regen braking fits into the sim, and how brake pressure turns into a current command for the inverter. i don't have access to the VCU code, so i didn't write any regen logic. i checked that the sim can already do regen, and added one small hook to the brakes so regen and friction can share a stop.
+
+what already worked (checked, not changed)
+the inverter takes a signed current_request_A (like a VESC set-current), so a negative one makes negative torque. that flows to the wheels as a braking torque and the pack charges. i ran it from 20 m/s with no pedal at 60% SOC: -20 A gives -4.4 Nm per motor, -60 A gives -13.2 Nm, -120 A gives -26.4 Nm (about 4.55 A per Nm), the pack current goes negative (charging) and the car slows more as the request gets bigger. the wheel torque is already motor torque * gear ratio / 4 wheels so the chassis treats regen the same as the brake.
+
+what i added
+1. BrakeConfig.update(bps_percent, regen_torque_Nm=0.0). regen_torque_Nm is the braking torque the motors are already putting on each wheel. the pedal is the total the driver asked for, so the friction brakes only make up the rest: friction torque = pedal torque - regen torque, never below 0. default is 0 so nothing changes if nobody uses regen.
+2. getFrontRequestedTorque_Nm() / getRearRequestedTorque_Nm(): the total braking the pedal is asking for per wheel (what a regen controller would split up). getFrontWheelTorque_Nm() / getRearWheelTorque_Nm() are now what the friction brakes still have to hold.
+3. line pressure is still the full pedal pressure, because that's what the real pressure sensor reads.
+4. VehicleConfig.update passes the regen torque to the brake automatically: if the motors are making negative torque, that much comes off the friction brakes. one line, in seong's file.
+5. 5 new tests in test_brakes_wheel_slip.py (hook math, friction never negative, negative current slows the car and charges the pack, regen replaces friction in the full car). 491 pass now.
+
+how brake pressure becomes a current command (for the regen person)
+brake pedal % -> brake.update() -> front/rear line pressure (getFrontPressure_Pa / getRearPressure_Pa, same as the log's Brake Pres Front/Rear) and the total braking torque the pedal wants per wheel (getFront/RearRequestedTorque_Nm)
+-> the regen controller decides how much of that the motors take, as a wheel torque
+-> motor torque = wheel torque / gear_ratio (11.81), per motor
+-> current = motor torque * about 4.55 A per Nm (motor.find_iq_desired(1.0, id), it depends on the motor and field weakening)
+-> send that as a negative current_request_A to vehicle.update() / advance(), along with the same bps_percent
+-> the brakes then back off by whatever the motors actually deliver
+so the simple first version is: regen takes a fraction of the pedal torque (capped by the limits below), the friction brakes cover the rest.
+
+what the regen person needs to know / limits i found
+- a pack near full can't take much charge. at 95% SOC, -60 A tripped the BMS overvoltage fault (a cell hit 4.219 V) after 0.05 s and shut the contactors, so the torque went to 0. at 60% SOC -60 A and -120 A are fine. the regen logic needs to back off as SOC and cell voltage go up.
+- the sim starts crashing with "Pack SOC went outside the modeled range" at 100% SOC when moving (already in the notes, item 3), so use 95% or less.
+- one motor is simulated for all 4, so regen is split evenly over all 4 wheels. a real car would probably regen on one axle only, and that changes brake balance and when each axle locks. that needs per axle motors (same todo as the front spin issue).
+- regen torque fades at low motor speed in real life, i haven't checked what the sim's speed fade (getSpeedFade) does for negative requests.
+- lockup: more regen on one axle means less friction there, but the tire doesn't care where the torque came from. the same slip and tire force loop applies, so too much total braking on an axle still locks it (a regen controller that ignores wheel slip could lock the drive axle).
+
+not done / needs integration
+- the regen logic itself (VCU firmware, not in this sim). right now the only way to test it is to pass current_request_A yourself.
+- no charge current limit from the BMS/pack is fed back to the request, the BMS only trips a fault after the fact.
+- the blend is "pedal is the total", which is a design choice. if the real car adds regen on top of the pedal, that's a one line change in VehicleConfig.update.
+- no scenario with regen yet (Tests/scenario.py only takes a throttle pedal and a brake pedal).
+- hydraulic lag and brake temperature are still not modelled.

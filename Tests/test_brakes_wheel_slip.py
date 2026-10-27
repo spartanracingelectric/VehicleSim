@@ -194,3 +194,56 @@ def test_full_car_runs_on_the_magic_formula_tire():
     result = runScenario(Scenario("magic formula part throttle", pedal=hold(30), run_time_s=0.5, vehicle=car))
     assert result.tire_model == "magic_formula"
     assert result.speed_mps[-1] > 0.0
+
+
+# ---------------------------------------------------------------- regen blending (brake hook + negative current)
+class TestRegenBlend:
+    def test_no_regen_changes_nothing(self):
+        brake = make_brake()
+        brake.update(40.0)
+        assert brake.getFrontWheelTorque_Nm() == brake.getFrontRequestedTorque_Nm()
+        assert brake.getRearWheelTorque_Nm() == brake.getRearRequestedTorque_Nm()
+
+    def test_regen_takes_over_part_of_the_pedal_request(self):
+        brake = make_brake()
+        brake.update(40.0)
+        requested_front = brake.getFrontRequestedTorque_Nm()
+        pressure = brake.getFrontPressure_Pa()
+        brake.update(40.0, regen_torque_Nm=30.0)
+        assert brake.getFrontWheelTorque_Nm() == pytest.approx(requested_front - 30.0)
+        assert brake.getFrontPressure_Pa() == pytest.approx(pressure)    # sensor still reads the pedal
+        assert brake.getFrontWheelTorque_Nm() + 30.0 == pytest.approx(requested_front)
+
+    def test_friction_never_goes_negative(self):
+        brake = make_brake()
+        brake.update(10.0, regen_torque_Nm=10000.0)
+        assert brake.getFrontWheelTorque_Nm() == 0.0 and brake.getRearWheelTorque_Nm() == 0.0
+        brake.update(10.0, regen_torque_Nm=-5.0)    # negative is ignored, regen can't add friction
+        assert brake.getFrontWheelTorque_Nm() == brake.getFrontRequestedTorque_Nm()
+
+
+def test_negative_current_request_regens_and_slows_the_car():
+    from Vehicle.MainConfigs.SR18 import SR18
+    coast = deepcopy(SR18)
+    regen = deepcopy(SR18)
+    for car in (coast, regen):
+        car.battery.save_history = False
+        car.battery.reset(initial_soc=0.6)    # a full pack would trip the BMS overvoltage
+        car.chassis.speed_mps = 20.0
+    coast.advance(0.3, current_request_A=0.0)
+    regen.advance(0.3, current_request_A=-60.0)
+    assert regen.getTorqueFeedback_Nm() < 0
+    assert regen.battery.current_A < 0                       # charging the pack
+    assert regen.chassis.speed_mps < coast.chassis.speed_mps - 1.0
+    assert not regen.bms.isShutdown()
+
+
+def test_regen_replaces_friction_in_the_full_car():
+    from Vehicle.MainConfigs.SR18 import SR18
+    car = deepcopy(SR18)
+    car.battery.save_history = False
+    car.battery.reset(initial_soc=0.6)
+    car.chassis.speed_mps = 20.0
+    car.advance(0.05, current_request_A=-60.0, bps_percent=30.0)
+    assert car.brake.regen_torque_Nm > 0
+    assert car.brake.getFrontWheelTorque_Nm() < car.brake.getFrontRequestedTorque_Nm()

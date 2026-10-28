@@ -1,12 +1,13 @@
 class VCUConfig:
-    # stand-in for the flashed VCU: turns the pedal (APPS %) into a torque request per motor, once per loop.
+    # stand-in for the flashed VCU: turns the pedal (APPS %) into a current request per motor (A peak, the VESC's
+    # set-current), once per loop, like the real firmware does.
     # the real firmware's power limiting and traction control aren't modeled here (the bms only flags overpower)
-    def __init__(self, loop_period_s, max_torque_request_Nm):
+    def __init__(self, loop_period_s, max_current_request_A):
         self.loop_period_s = loop_period_s                   # how often the VCU runs its loop
-        self.max_torque_request_Nm = max_torque_request_Nm   # request per motor at 100% pedal
+        self.max_current_request_A = max_current_request_A   # request per motor at 100% pedal
 
         self.apps_percent = 0.0
-        self.torque_request_Nm = 0.0
+        self.current_request_A = 0.0
         self.time_to_next_loop_s = 0.0    # runs its first loop on the first update
 
     # call every sim step. the request only changes when a loop comes round, in between it holds the last one
@@ -15,13 +16,13 @@ class VCUConfig:
             self.runLoop(apps_percent)
             self.time_to_next_loop_s += self.loop_period_s
         self.time_to_next_loop_s -= dt_s
-        return self.torque_request_Nm
+        return self.current_request_A
 
-    # one VCU loop: read the pedal, map it to torque
+    # one VCU loop: read the pedal, map it to current
     # TODO: swap the straight line for the real pedal map from the firmware (deadband etc.)
     def runLoop(self, apps_percent):
         self.apps_percent = max(0.0, min(apps_percent, 100.0))
-        self.torque_request_Nm = self.apps_percent / 100 * self.max_torque_request_Nm
+        self.current_request_A = self.apps_percent / 100 * self.max_current_request_A
 
-    def getTorqueRequest_Nm(self):
-        return self.torque_request_Nm
+    def getCurrentRequest_A(self):
+        return self.current_request_A

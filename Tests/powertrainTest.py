@@ -29,7 +29,7 @@ def main():
     plotAcceleration(
         result.time_s,
         result.apps_percent,
-        result.torque_request_Nm,
+        result.torque_command_Nm,
         result.torque_feedback_Nm,
         result.speed_mps * 3.6,
         result.motor_rpm,
@@ -58,14 +58,14 @@ def checkAcceleration(result):
     speed_kph = result.speed_mps * 3.6
 
     # same rules as the scenario tests (Tests/checks.py): vcu only changes its request on its 10 ms loop,
-    # torque never over the motor max, the bms flag matches what it measured, the car keeps speeding up
+    # motor current never over the inverter's limit, the bms flag matches what it measured, the car keeps speeding up
     # until it tops out, and the pack goes over 80 kW at some point (nothing here limits it)
     for rule in ALWAYS + [accelerates(), overpowerFlagged()]:
         rule(result)
 
-    # once the pedal is down the request is full torque
+    # once the pedal is down the request is full current
     full_pedal = result.time_s >= THROTTLE_RAMP_TIME_S + result.vcu_loop_period_s
-    assert np.all(result.torque_request_Nm[full_pedal] == result.max_torque_request_Nm)
+    assert np.all(result.current_request_A[full_pedal] == result.max_current_request_A)
     top = np.argmax(result.speed_mps)
 
     # results

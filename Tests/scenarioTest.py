@@ -13,7 +13,7 @@ from Tests.checks import (ALWAYS, torqueAbout, torqueNeverAbove, accelerates, co
 #   python Tests/scenarioTest.py --save plots               save each plot as plots/<name>.png instead
 #   python Tests/scenarioTest.py --slow                     include SLOW_SCENARIOS (minutes each, pytest skips them)
 # one Scenario = one test: the pedal over time, how the car starts, when it stops, and what has to be true.
-# checks.ALWAYS (motor torque cap, vcu timing, bms flag) runs on every scenario on top of its own checks.
+# checks.ALWAYS (inverter current limit, vcu timing, bms flag) runs on every scenario on top of its own checks.
 # to add a test, add a row: pedal shapes are in Tests/pedals.py, checks in Tests/checks.py
 
 SCENARIOS = [

@@ -50,6 +50,19 @@ def torqueNeverAbove(torque_Nm=None, tolerance=0.02, overshoot=0.15, overshoot_s
         assert over_s <= overshoot_s, f"torque feedback was over {limit_Nm} Nm for {over_s * 1000:.1f} ms"
     return rule
 
+# the inverter's real limit: it holds a current, not a torque. the motor's total current (A peak) never goes over
+# the inverter's current limit, bar a short overshoot after a sudden step. (with field weakening the negative id
+# adds reluctance torque, so the torque itself can go past the AMK's 21 Nm while the current stays inside)
+def currentNeverAbove(tolerance=0.02, overshoot=0.15, overshoot_s=0.005):
+    @describe("motor current never above the inverter's current limit (bar a short overshoot)")
+    def rule(result):
+        limit_A = result.current_limit_A
+        worst_A = np.max(result.motor_current_A)
+        assert worst_A <= (1 + overshoot) * limit_A, f"motor current reached {worst_A:.1f} A, limit is {limit_A} A"
+        over_s = np.sum(result.motor_current_A > (1 + tolerance) * limit_A) * result.record_every * result.control_period_s
+        assert over_s <= overshoot_s, f"motor current was over {limit_A} A for {over_s * 1000:.1f} ms"
+    return rule
+
 
 # ---- motion
 
@@ -141,12 +154,12 @@ def vcuUpdatesOnItsLoop():
         periods_per_loop = round(result.vcu_loop_period_s / result.control_period_s)
         on_loop = result.tick % periods_per_loop == 0
         pedal_percent = np.clip(result.apps_percent[on_loop], 0, 100)
-        assert np.allclose(result.torque_request_Nm[on_loop], pedal_percent / 100 * result.max_torque_request_Nm), \
+        assert np.allclose(result.current_request_A[on_loop], pedal_percent / 100 * result.max_current_request_A), \
             "a vcu request didn't match the pedal it read"
 
         # only checkable when every tick was logged
         if result.record_every == 1:
-            changes = np.nonzero(np.diff(result.torque_request_Nm))[0] + 1
+            changes = np.nonzero(np.diff(result.current_request_A))[0] + 1
             off_loop = changes[result.tick[changes] % periods_per_loop != 0]
             assert len(off_loop) == 0, f"vcu request changed off its loop at {result.time_s[off_loop[0]]:.4f} s"
     return rule
@@ -165,4 +178,4 @@ def bmsFlagMatchesItsReading():
             "a bms reading doesn't match the pack power at the moment it sampled"
     return rule
 
-ALWAYS = [torqueNeverAbove(), vcuUpdatesOnItsLoop(), bmsFlagMatchesItsReading()]
+ALWAYS = [currentNeverAbove(), vcuUpdatesOnItsLoop(), bmsFlagMatchesItsReading()]

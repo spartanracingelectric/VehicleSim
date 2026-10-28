@@ -4,7 +4,7 @@ A simulation of **SR18's powertrain and straight-line driving**: 4 AMK DD5 hub m
 the 140s3p tractive battery, the BMS, and the car moving down a straight. It's timed the way the real car is timed:
 
 ```
-driver pedal ─► VCU (10 ms) ─► 4 × inverter (100 µs) ─► 4 × motor (5 µs steps) ─► gearbox + tires ─► car speed
+driver pedal ─► VCU (10 ms) ─► 4 × inverter (38.5 µs) ─► 4 × motor (4.8 µs steps) ─► gearbox + tires ─► car speed
                                      │                         │
                                      └──── DC current ◄────────┘
                                               ▼
@@ -12,7 +12,7 @@ driver pedal ─► VCU (10 ms) ─► 4 × inverter (100 µs) ─► 4 × motor
 ```
 
 It's used two ways:
-- **On its own**, with a simple stand-in VCU (pedal → torque): quick studies of acceleration, power, energy, the
+- **On its own**, with a simple stand-in VCU (pedal → current): quick studies of acceleration, power, energy, the
   battery and the motors. Tests in `Tests/`.
 - **Driven by the real VCU firmware** (software-in-the-loop, in the SRE-VCU repo): the flashed C code runs on the PC
   in lockstep with this sim, and its motor current commands drive the car.
@@ -52,7 +52,7 @@ Run from the repo root (every test also works as `python -m Tests.<name>`):
 pytest Tests/scenarioTest.py -v                      # the straight-line scenarios, pass/fail each (~20 s)
 python Tests/scenarioTest.py "lift off" --plot       # one scenario, plotted
 python Tests/powertrainTest.py                       # 15 s full-throttle run + plot (~30 s)
-python Tests/motorDatasheetTest.py                   # motor + inverter against AMK's datasheet curves
+python Tests/motorDatasheetTest.py                   # motor + VESC inverter against AMK's datasheet curves
 ```
 
 The sim runs about **2× slower than real time** (15 s of driving ≈ 30 s on the PC). It has its own clock, so
@@ -72,16 +72,15 @@ car = deepcopy(SR18)                             # always a copy: SR18 carries r
 car.battery.reset(initial_soc=0.6)               # start from 60 % (sets the pack voltage to match)
 car.chassis.speed_mps = 20.0                     # rolling start
 
-car.update(apps_percent=100)                     # one 100 µs step, the stand-in VCU decides the torque
-car.advance(0.01, apps_percent=100)              # 10 ms (100 steps)
-car.advance(0.01, torque_request_Nm=16.8)        # 10 ms, torque per motor decided outside the sim
-car.advance(0.01, current_request_A=76.3)        # 10 ms, current per motor, like a VESC's set-current
+car.update(apps_percent=100)                     # one 38.5 µs step, the stand-in VCU decides the current
+car.advance(0.01, apps_percent=100)              # 10 ms (260 steps)
+car.advance(0.01, current_request_A=76.3)        # 10 ms, current per motor (A peak) decided outside the sim
 
 car.chassis.getSpeed_mps(), car.battery.soc, car.battery.terminal_power_W, car.getTorqueFeedback_Nm()
 ```
 
-`torque_request_Nm` / `current_request_A` skip the stand-in VCU, for when something else (the real firmware)
-decides. `current_request_A` is what SR18's VESC inverters actually get.
+`current_request_A` skips the stand-in VCU, for when something else (the real firmware) decides. It's the VESC's
+set-current, which is all SR18's inverters take: there's no torque setpoint.
 
 ### From another repo (SRE-VCU's SIL tests)
 
@@ -105,8 +104,9 @@ the car with `advance(0.01, current_request_A=...)`. See `SRE-VCU/dev/sil/tests/
 Vehicle/
   VehicleConfig.py          the car: holds every part, runs update() / advance() of the whole chain
   MainConfigs/SR18.py       SR18 assembled from the parts below (swap parts here)
-  VCU/                      VCUConfig.py      + Configs/vcu1.py        stand-in VCU: pedal -> torque, 10 ms loop
-  Inverter/                 InverterConfig.py + Configs/inverter1.py   current control, field weakening, PWM
+  VCU/                      VCUConfig.py      + Configs/vcu1.py        stand-in VCU: pedal -> current, 10 ms loop
+  Inverter/                 InverterConfig.py + Configs/vesc_srinverter.py   the SR custom inverter: VESC firmware's
+                                                                             current loop, limits, field weakening, PWM
   Motor/                    MotorConfig.py    + Configs/amk_dd5.py, emrax_228.py (placeholder), AMK datasheet
   Battery/                  TractiveBatteryPack.py, Cell.py + Configs/sr17.py (SR18's 140s3p pack), battery2/3
   BMS/                      BMSConfig.py      + Configs/bms1.py        cell monitoring, faults, 80 kW flag
@@ -152,34 +152,34 @@ charge, BMS latch, motor currents, controller memory). The test helpers do it fo
 
 ## What happens in one update
 
-`car.update(...)` simulates **one inverter switching period (100 µs)**; `car.advance(duration_s, ...)` runs as many
-as fit (100 for 10 ms). Four clocks run inside:
+`car.update(...)` simulates **one run of the inverter's current loop (38.5 µs)**: the VESC switches at 13 kHz and
+samples in both zero vectors, so its loop runs at 26 kHz. `car.advance(duration_s, ...)` runs as many as fit (260 for
+10 ms). Four clocks run inside:
 
 | Clock | Period | What updates |
 |---|---|---|
-| VCU loop (stand-in) | 10 ms (every 100th update) | reads the pedal, new torque request, holds it in between |
-| BMS sample | 50 ms (every 500th update) | reads cells / temperatures / current, sets flags and faults |
-| Inverter | 100 µs (every update) | current control decides the 3 phase voltages, held for the period |
-| Motor | 5 µs (20 steps per update) | motor currents, torque, power |
+| VCU loop (stand-in) | 10 ms (every 260th update) | reads the pedal, new current request, holds it in between |
+| BMS sample | 50 ms (every 1300th update) | reads cells / temperatures / current, sets flags and faults |
+| Inverter | 38.5 µs (every update) | current control decides the 3 phase voltages, held for the period |
+| Motor | 4.8 µs (8 steps per update) | motor currents, torque, power |
 
 In order (`Vehicle/VehicleConfig.py`):
 
-1. **Request:** the stand-in VCU turns the pedal into a torque per motor, unless `torque_request_Nm` or
-   `current_request_A` was given.
+1. **Request:** the stand-in VCU turns the pedal into a current per motor, unless `current_request_A` was given.
 2. **BMS shut down?** Then the contactors are open: motors and inverters off, no current.
 3. **Inverter** `updateCurrentControl`, once:
-   - field weakening: if the voltage is running out, push `id` negative
-   - the `iq` target: from the torque (capped at 21 Nm, reluctance torque counted), or the current request directly
-   - speed limit fade near 20 000 rpm, total current capped at 105 A rms
-   - PI current controllers + feedforward → `vd`, `vq` → voltage limit → 3 phase voltages
-4. **Motor**, 20 steps of 5 µs: currents, torque, power. Each step the inverter measures the current and turns the
+   - field weakening: past 80 % of max duty, push `id` negative (a straight line up to 49.5 A at max duty)
+   - the `iq` target is the current request, then the firmware's limits in its order: battery current, motor
+     current (the driving side fading out from 16 000 to 20 000 rpm), total current under 148.5 A (105 A rms)
+   - PI current controllers + decoupling → `vd`, `vq` → voltage limit (d axis first) → 3 phase voltages
+4. **Motor**, 8 steps of 4.8 µs: currents, torque, power. Each step the inverter measures the current and turns the
    motor's power into DC current.
 5. **Battery:** draws 4 × the average DC current → voltage sag, SOC, heat.
 6. **BMS:** acts on its 50 ms sample.
 7. **Chassis:** 4 × torque × gear ratio → wheel force (capped by tire grip) − drag − rolling → new speed, which sets
    the motor speed for the next update.
 
-**Sim time vs computer time:** the sim never looks at the PC's clock. Sim time goes up by exactly 100 µs per update,
+**Sim time vs computer time:** the sim never looks at the PC's clock. Sim time goes up by exactly one control period per update,
 and the VCU and BMS count their loops in sim time, so the timing is exact however long the PC takes.
 
 ---
@@ -190,8 +190,8 @@ Each part follows its model PDF (inverter, motor, battery). "Level" is how detai
 
 | Part | Model | Notes |
 |---|---|---|
-| **VCU (stand-in)** | 10 ms loop, `request = APPS / 100 × 21 Nm` | no power limiting, traction control, plausibility or regen: those come from the real firmware (SIL) |
-| **Inverter** | Level 0 power (flat 97 %), Level 1 average voltage (SVM, `V_bus / √3`); Level 2 PWM switching only in `pwmTest` | AMK's controller gains (Kp 0.58/0.64 V/A, Tn 1.2 ms), feedforward, averaged current sensing, field weakening PI (Kp 0.08 A/V, Tn 6 ms) down to −35 A rms, d axis first at the voltage limit, torque or current setpoint |
+| **VCU (stand-in)** | 10 ms loop, `request = APPS / 100 × 95.6 A` (the current for 21 Nm) | no power limiting, traction control, plausibility or regen: those come from the real firmware (SIL) |
+| **Inverter** | VESC firmware's FOC loop. Level 0 power (flat 97 %), Level 1 average voltage (SVM, `0.95 · V_bus / √3`); Level 2 PWM switching only in `pwmTest` | current setpoint only, limits in the firmware's order, PI (Kp 0.18 V/A, Ki 67.5 V/As) with cross + back-EMF decoupling, half-period angle lead, averaged current sensing, duty-cycle field weakening down to −49.5 A, d axis first at the voltage limit |
 | **Motor** | Level 2 average-value d/q model, forward Euler at 5 µs | `Te = 1.5·(poles/2)·[λf·iq + (Ld−Lq)·id·iq]`, copper loss; speed set by the car |
 | **Battery** | Level 2 Thevenin: OCV(SOC) − I·R | 140s3p, 5 Ah / 6.7 mΩ cells, coulomb counting, I²R heat, no cooling |
 | **BMS** | samples every 50 ms | latched shutdown on cell over/undervoltage (4200 / 2800 mV) or temperature (60 / 0 °C); **> 80 kW is only flagged** |
@@ -218,15 +218,15 @@ Power flow, checked to balance in the tests (motor power = shaft + copper, withi
 | motor Rs (per phase) | 0.0675 Ω | datasheet Rtt 0.135 Ω is terminal-to-terminal, ÷ 2 |
 | motor λf | 0.0293 Wb | from ke = 18.8 V/1000 rpm (Kt would give 0.0245, 16 % too low) |
 | motor Lq / Ld | 0.24 / 0.12 mH | **swapped vs the datasheet labels**, only this way fits its curves |
-| field weakening current | 35 A rms | datasheet "magn. current Im" |
-| controller gains | current Kp 0.58/0.64, Tn 1.2 ms; voltage Kp 0.08, Tn 6 ms | datasheet controller settings |
+| field weakening current | 35 A rms | datasheet "magn. current Im", used as the VESC's `fw_current_max` |
 | VCU loop / BMS sample | 10 ms / 50 ms | team |
 | BMS limits | 4200 / 2800 mV, 60 / 0 °C, 80 kW | `bms1.py` |
 | battery | 140s3p, 5 Ah, 6.7 mΩ cells, 50.8 kg | `Battery/Configs/sr17.py` |
 | tire radius / grip | 0.2032 m / μ 1.2 | `tire1.py` |
 | vehicle mass | 204.1 kg + battery | `SR18.py` |
 | **inverter efficiency** | 0.97 | **placeholder** |
-| **switching frequency** | 10 kHz | **placeholder** |
+| inverter timing and fixed limits | 13 kHz switching, 26 kHz current loop, 60 A battery per inverter, max duty 0.95, 100k erpm fading from 80 % | compiled-in defaults: `hw_SRINVERTER.h` + `mcconf_default.h` in SR-Custom-Inverter-FW |
+| **inverter settings** | ±148.5 A motor current, Kp 0.18 / Ki 67.5, cross + back-EMF decoupling, 49.5 A field weakening | **what VESC Tool would need for the AMK**, swap for what gets flashed (firmware defaults: ±60 A, Kp 0.03 / Ki 50, no decoupling, no field weakening) |
 | **drag area / rolling resistance** | 1.2 m² / 0.015 | **placeholders** (`chassis1.py`) |
 | **driver mass** | not included | **placeholder** (`driver1` is 10 kg) |
 
@@ -247,9 +247,10 @@ Scenario("half throttle from 60 km/h",
   `start_soc`, `start_temp_C`, `start_speed_kph`, `record_every_s` (log less often on long runs), `vehicle`.
 - **Pedal shapes** (`pedals.py`): `hold(30)`, `ramp(to=100, over_s=0.8)`, `steps((0, 100), (2.0, 0))`,
   `pulses(100, on_s, off_s)`.
-- **Checks** (`checks.py`): `torqueAbout`, `torqueNeverAbove`, `accelerates`, `coasts`, `staysParked`,
+- **Checks** (`checks.py`): `torqueAbout`, `torqueNeverAbove`, `currentNeverAbove`, `accelerates`, `coasts`, `staysParked`,
   `reachesDistance`, `reachesSpeed`, `noOverpower`, `overpowerFlagged`, `noShutdown`, `shutsDown`. `ALWAYS` runs on
-  every scenario: torque never over the motor max, the VCU only changes on its loop, the BMS flag matches its reading.
+  every scenario: motor current never over the inverter's limit, the VCU only changes on its loop, the BMS flag matches
+  its reading.
 
 ```bash
 pytest Tests/scenarioTest.py -v                         # every scenario
@@ -265,8 +266,9 @@ Run with `python Tests/<name>.py` (plots open a window; `MPLBACKEND=Agg` to skip
 
 | Test | Checks |
 |---|---|
-| `motorDatasheetTest.py` | motor + inverter against AMK's torque-speed curves at 500 / 600 V |
-| `motorInverterTest.py` | one motor + inverter on a dyno: torque steps, voltage limit with field weakening, current setpoint steps |
+| `motorDatasheetTest.py` | motor + VESC inverter against AMK's torque-speed curves at 500 / 600 V |
+| `motorInverterTest.py` | one motor + inverter on a dyno: current steps with the power balance, voltage limit with field weakening |
+| `vescInverterTest.py` | the firmware's settings on a dyno: current and battery current limits, speed fade, field weakening, decoupling, 26 kHz car |
 | `inverterTest.py` | inverter math: power conversion, transforms, voltage limit (run it after touching the inverter) |
 | `pwmTest.py` | Level 2: real IGBT switching into a test load, against the average model |
 | `powertrainTest.py` | 15 s full throttle with the full plot, and a low-pack shutdown |
@@ -278,18 +280,19 @@ Run with `python Tests/<name>.py` (plots open a window; `MPLBACKEND=Agg` to skip
 
 | | Result |
 |---|---|
-| 75 m accel event | 3.98 s, 129 km/h (grip-limited, no driver mass) |
+| 75 m accel event | 3.99 s, 126 km/h (grip-limited, no driver mass) |
 | 0–100 km/h | 2.82 s |
-| top speed | 129 km/h (motors at the 20 000 rpm limit) |
-| peak pack power | ~151 kW (no power limiting in the sim; the BMS flags > 80 kW from ~1.6 s) |
-| motor vs AMK datasheet | exact up to the knee, within −9 % / +19 % past it with field weakening |
-| full throttle until empty | 11 min 30 s, 24.4 km, 7.07 kWh, SOC 100 % → 3.2 %, pack 25 → 52.7 °C (no cooling), ends in undervoltage |
+| top speed | 127 km/h (19 550 rpm: the VESC fades the current out from 16 000 rpm) |
+| peak pack power | ~158 kW (no power limiting in the sim; the BMS flags > 80 kW from ~1.6 s) |
+| peak torque per motor | 24.6 Nm: the VESC holds 95.6 A and field weakening's negative id adds reluctance torque |
+| motor + VESC vs AMK datasheet | +8 to +31 % up to ~17 000 rpm (field weakening from 80 % duty), then well under (speed fade) |
+| full throttle until empty | 11 min 30 s, 24.4 km, 7.07 kWh, SOC 100 % → 3.2 %, pack 25 → 52.7 °C (no cooling), ends in undervoltage (from before the VESC inverter, not re-run) |
 
-These are with the stand-in VCU (full pedal = 21 Nm). Driven by the real firmware, full pedal is 76.3 A per motor
+These are with the stand-in VCU (full pedal = 95.6 A, 21 Nm at id = 0). Driven by the real firmware, full pedal is 76.3 A per motor
 (≈ 16.8 Nm), so launches are slower.
 
 **How much to trust it:** good from 0 to ~95 km/h (the main errors are the placeholders: driver mass, drag);
-reasonable from ~95 to 129 km/h with field weakening (within ~20 % of the datasheet, slightly optimistic). Good for
+reasonable from ~95 to 127 km/h with field weakening (the VESC's settings there are guesses until the flashed ones are in). Good for
 testing VCU logic and timing and for comparing options; not yet for absolute lap times or energy per lap.
 
 ---
@@ -300,13 +303,15 @@ testing VCU logic and timing and for comparing options; not yet for absolute lap
   would duplicate or misrepresent it.
 - **One motor + inverter simulated, × 4.** All four get the same request, so they'd be identical. Has to change when
   they get different ones (traction control, torque vectoring).
-- **Torque or current setpoint.** The stand-in VCU asks for torque (like the AMK inverter); the real firmware asks
-  for current (like a VESC). Below field weakening they give the same result; with it, the current setpoint holds
-  the current and the torque is whatever it makes, as a VESC does.
-- **Torque names match the log:** request (VCU, *MCM Torque Command*), command (inverter after its limits,
-  *MCM Commanded Torque*), feedback (what the motor made, *MCM Torque Feedback*).
+- **The inverter is the VESC, only.** SR18's inverters run VESC firmware, so `InverterConfig` follows its FOC loop
+  (`mcpwm_foc.c`): a current setpoint (no torque setpoint), limits in the firmware's order (field weakening, battery
+  current via mod_q, motor current with the speed fade, total), field weakening as a straight line on the filtered
+  duty cycle, SVM only. Its defaults are the firmware's compiled-in ones; `vesc_srinverter.py` sets what VESC Tool
+  would. The stand-in VCU asks for current like the real firmware does.
+- **Torque names match the log:** command (what the inverter's current target makes, *MCM Commanded Torque*),
+  feedback (what the motor made, *MCM Torque Feedback*).
 - **Averaged current sensing.** Sampling once per period let the current drift off its target at high speed (the
-  rotor turns ~60° per 100 µs at 20 000 rpm); averaging over the period fixes it.
+  rotor turns ~23° per 38.5 µs at 20 000 rpm); averaging over the period fixes it.
 - **Average inverter model, not switching.** Switching needs 0.5 µs steps (10× slower) and `pwmTest` showed the
   averages match within 2.5 V.
 - **The Crows log is SR17 (EMRAX, Cascadia inverter, ~340 V)**, so it can't validate SR18's numbers. Its pedal and
@@ -317,9 +322,12 @@ testing VCU logic and timing and for comparing options; not yet for absolute lap
 ## Known gaps
 
 **Placeholders (quick, they change every result):** driver mass, drag area, rolling resistance, inverter efficiency
-and switching frequency, EMRAX electrical values (for an SR17 config).
+and the VESC Tool settings (current limits, gains, decoupling, field weakening), EMRAX electrical values (for an
+SR17 config).
 
 **Not modeled yet:**
+- VESC: the 180 A absolute-current fault, field weakening backoff and ramp, MTPA, integrator clamping (the sim
+  stops integrating instead)
 - brake force and regen, wheel slip and load transfer, steering / cornering (straight line only)
 - 4 separate motors / inverters
 - battery current limit, cooling, RC voltage recovery; motor / inverter temperatures (the 105 A max is allowed for
@@ -327,8 +335,10 @@ and switching frequency, EMRAX electrical values (for an SR17 config).
 - inverter conduction and switching losses (flat 3 % now)
 - a driver model and laps; replaying pedals from a log
 
-**Model notes:** field weakening gives up to ~19 % more torque than AMK's curves mid-range; the Ld/Lq swap is a
-judgment call; a 0 → 100 % pedal step overshoots ~11 % for ~2.5 ms (realistic ramps don't).
+**Model notes:** the VESC's battery current limit only counts `mod_q · iq` (like the firmware, see its TODO), so with
+field weakening the real battery current goes past it (~86 A per inverter at full throttle vs the 60 A limit);
+started cold above ~18 000 rpm at 500 V the currents run away before field weakening builds up (the car never gets
+there cold, the datasheet test spins up); the Ld/Lq swap is a judgment call; a 0 → 100 % pedal step overshoots ~11 % for ~2.5 ms (realistic ramps don't).
 
 **Validation:** compare against SR18 logs once it runs (same pedal input; compare speed, pack current, voltage).
 

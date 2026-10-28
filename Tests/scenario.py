@@ -18,7 +18,7 @@ class Scenario:
     start_soc: float = None                         # None = whatever the car's config starts at
     start_temp_C: float = None
     start_speed_kph: float = 0.0
-    record_every_s: float = None                    # None = log every tick (100 us), long runs can log less often
+    record_every_s: float = None                    # None = log every tick (38.5 us), long runs can log less often
     vehicle: object = None                          # None = SR18
 
 def stopWhenBmsShutsDown(vehicle):
@@ -29,7 +29,7 @@ def runScenario(scenario):
     control_period_s = vehicle.getControlPeriod_s()
     record_every = 1 if scenario.record_every_s is None else max(1, round(scenario.record_every_s / control_period_s))
 
-    # one pass = one inverter switching period (100 us): the driver's pedal goes into the car
+    # one pass = one run of the inverter's current loop (38.5 us): the driver's pedal goes into the car
     log = []
     for tick in range(round(scenario.run_time_s / control_period_s)):
         time_s = tick * control_period_s
@@ -52,7 +52,8 @@ def runScenario(scenario):
     result.end_time_s = result.time_s[-1] + control_period_s
     result.num_motors = vehicle.num_motors
     result.peak_torque_Nm = vehicle.motor.peakTorque_Nm
-    result.max_torque_request_Nm = vehicle.vcu.max_torque_request_Nm
+    result.current_limit_A = max(vehicle.inverter.current_max_A, -vehicle.inverter.current_min_A)
+    result.max_current_request_A = vehicle.vcu.max_current_request_A
     result.vcu_loop_period_s = vehicle.vcu.loop_period_s
     result.bms_sample_period_s = vehicle.bms.sample_period_s
     result.energy_used_kWh = vehicle.battery.discharged_energy_kWh - vehicle.battery.charged_energy_kWh
@@ -80,9 +81,10 @@ def readCar(vehicle, tick, time_s, apps_percent):
         "tick": tick,
         "time_s": time_s,
         "apps_percent": float(apps_percent),
-        "torque_request_Nm": vehicle.vcu.getTorqueRequest_Nm(),
+        "current_request_A": vehicle.vcu.getCurrentRequest_A(),
         "torque_command_Nm": vehicle.inverter.getTorqueCommand_Nm(),
         "torque_feedback_Nm": vehicle.getTorqueFeedback_Nm(),
+        "motor_current_A": float(np.hypot(vehicle.motor.id, vehicle.motor.iq)),
         "speed_mps": vehicle.chassis.getSpeed_mps(),
         "distance_m": vehicle.chassis.getDistance_m(),
         "motor_rpm": vehicle.getMotorSpeed_radps() * 60 / (2 * np.pi),
@@ -117,7 +119,7 @@ def plotScenario(result, save_path=None):
     plotAcceleration(
         result.time_s,
         result.apps_percent,
-        result.torque_request_Nm,
+        result.torque_command_Nm,
         result.torque_feedback_Nm,
         result.speed_mps * 3.6,
         result.motor_rpm,

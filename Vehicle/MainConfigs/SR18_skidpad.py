@@ -1,9 +1,13 @@
 from Vehicle.SkidPadConfig import SkidPadConfig
 
+from Vehicle.Tire.Configs.tire_r20 import tire_r20
+from Vehicle.Aero.Configs.aero1 import aero1
 
 SR18_skidpad = SkidPadConfig(
     mass=288.0,                         # kg
     wheelbase=1.53924,                  # m
+    rear_weight_distribution=0.50,      # unitless
+    cg_height=0.32512,                  # m
     front_track=1.2065,                 # m
     rear_track=1.2065,                  # m
     front_lateral_transfer=0.45,        # no unit :p
@@ -14,8 +18,8 @@ SR18_skidpad = SkidPadConfig(
     gear_ratio=11.81,                   # no unit :p
     rolling_resistance=0.015,           # no unit :p
     min_slip_speed=1.0,                 # m/s
-    tire=None,
-    aero=None,
+    tire=tire_r20,
+    aero=aero1,
     steering=None,
     limits=None,
 )

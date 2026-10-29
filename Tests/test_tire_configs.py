@@ -4,12 +4,15 @@ and every one must work through the shared calls the chassis uses, so any of the
 NOTE: These test cases are AI-generated on purpose, as an independent check on the hand-written model.
 """
 import math
+from unicodedata import name
 
 import pytest
 
 from Functions.loadConfigs import loadConfigs
 from Vehicle.Tire.TireConfig import TireConfig
 from Vehicle.Tire.MagicFormulaTireConfig import MagicFormulaTireConfig
+from Vehicle.Tire.PacejkaR20TireConfig import PacejkaR20TireConfig
+
 
 tires = vars(loadConfigs("Vehicle.Tire.Configs"))
 dugoff_tires = {name: tire for name, tire in tires.items() if isinstance(tire, TireConfig)}
@@ -22,8 +25,8 @@ def test_at_least_one_tire_config_exists():
 @pytest.mark.parametrize("name", sorted(tires))
 class TestEveryTire:
     def test_is_a_known_tire_model(self, name):
-        assert isinstance(tires[name], (TireConfig, MagicFormulaTireConfig))
-        assert tires[name].model_name in ("dugoff", "magic_formula")
+        assert isinstance(tires[name], (TireConfig, MagicFormulaTireConfig, PacejkaR20TireConfig))
+        assert tires[name].model_name in ("dugoff", "magic_formula", "pacejka_r20")
 
     def test_radius_is_a_plausible_size_in_meters(self, name):
         assert 0.1 <= tires[name].radius_m <= 0.6
@@ -34,12 +37,17 @@ class TestEveryTire:
 
     def test_forces_stay_inside_the_friction_limit(self, name):
         tire = tires[name]
-        mu = tire.tireroadfriction if isinstance(tire, TireConfig) else tire.mu
         for slip_ratio in (-1.0, -0.3, 0.0, 0.1, 0.5, 2.0):
             for slip_angle in (-0.4, 0.0, 0.05, 0.4):
                 fx, fy = tire.calculateForces(800.0, slip_ratio, slip_angle)
                 assert math.isfinite(fx) and math.isfinite(fy)
-                assert math.hypot(fx, fy) <= mu * 800.0 * (1 + 1e-9)
+                if isinstance(tire, PacejkaR20TireConfig):
+                    # grip changes with load, so no single mu: compare to this tire's own max forces at 800 N
+                    grip_used = math.hypot(fx / tire.getPeakLongitudinal_N(800.0), fy / tire.getPeakLateral_N(800.0))
+                    assert grip_used <= 1 + 1e-9
+                else:
+                    mu = tire.tireroadfriction if isinstance(tire, TireConfig) else tire.mu
+                    assert math.hypot(fx, fy) <= mu * 800.0 * (1 + 1e-9)
 
     def test_grip_limit_flag(self, name):
         tire = tires[name]

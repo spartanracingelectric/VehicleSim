@@ -14,7 +14,7 @@ def _find_x_peak(C, E, x_max, n=20000):
 
 class PacejkaR20TireConfig:
     model_name = "pacejka_r20"
-    
+
     """Pure-slip Pacejka 'Magic Formula' tire model for the Hoosier R20 compound,
     fit directly to real Calspan TTC Round 9 (project 2356) raw run data - see
     build_dataset.py and fit_pacejka_by_pressure.py in this folder for the full
@@ -141,6 +141,7 @@ class PacejkaR20TireConfig:
         self.lat_params = self._interp_params(psi, self.LAT_PARAMS_BY_PSI, self.track_grip_scale)
         self._x_peak_long = _find_x_peak(self.long_params[0], self.long_params[5], self.X_PEAK_SEARCH_MAX)
         self._x_peak_lat = _find_x_peak(self.lat_params[0], self.lat_params[5], self.X_PEAK_SEARCH_MAX)
+        self.normalized_slip = 0.0
 
     @classmethod
     def _interp_params(cls, psi, params_by_psi, track_grip_scale):
@@ -210,6 +211,7 @@ class PacejkaR20TireConfig:
         docstring's combined-slip caveat.
         """
         if fz <= 0.0:
+            self.normalized_slip = 0.0
             return 0.0, 0.0
 
         fx0 = self._pure(kappa, fz, self.long_params, self._x_peak_long)
@@ -220,6 +222,7 @@ class PacejkaR20TireConfig:
         ex = fx0 / dx if dx != 0.0 else 0.0
         ey = fy0 / dy if dy != 0.0 else 0.0
         resultant = np.hypot(ex, ey)
+        self.normalized_slip = resultant
 
         if resultant > 1.0:
             scale = 1.0 / resultant

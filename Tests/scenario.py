@@ -53,7 +53,7 @@ def runScenario(scenario):
     result.record_every = record_every
     result.end_time_s = result.time_s[-1] + control_period_s
     result.num_motors = vehicle.num_motors
-    result.peak_torque_Nm = vehicle.motor.peakTorque_Nm
+    result.peak_torque_Nm = vehicle.motors[0].peakTorque_Nm    # all 4 are the same motor
     result.max_torque_request_Nm = vehicle.vcu.max_torque_request_Nm
     result.vcu_loop_period_s = vehicle.vcu.loop_period_s
     result.bms_sample_period_s = vehicle.bms.sample_period_s
@@ -89,8 +89,9 @@ def readCar(vehicle, tick, time_s, apps_percent, bps_percent=0.0):
         "front_slip_ratio": vehicle.chassis.getFrontSlipRatio(),
         "rear_slip_ratio": vehicle.chassis.getRearSlipRatio(),
         "torque_request_Nm": vehicle.vcu.getTorqueRequest_Nm(),
-        "torque_command_Nm": vehicle.inverter.getTorqueCommand_Nm(),
-        "torque_feedback_Nm": vehicle.getTorqueFeedback_Nm(),
+        # per motor, averaged over the 4 (they all get the same request for now)
+        "torque_command_Nm": float(np.mean([inverter.getTorqueCommand_Nm() for inverter in vehicle.inverters])),
+        "torque_feedback_Nm": float(np.mean(vehicle.getTorqueFeedback_Nm())),
         "speed_mps": vehicle.chassis.getSpeed_mps(),
         "distance_m": vehicle.chassis.getDistance_m(),
         "motor_rpm": vehicle.getMotorSpeed_radps() * 60 / (2 * np.pi),
@@ -104,7 +105,7 @@ def readCar(vehicle, tick, time_s, apps_percent, bps_percent=0.0):
         "power_threshold_kW": vehicle.bms.max_power_threshold_kW,
         "overpower": vehicle.bms.has_overpower_fault(),
         "shutdown": vehicle.bms.isShutdown(),
-        "voltage_saturated": vehicle.inverter.isVoltageSaturated(),
+        "voltage_saturated": any(inverter.isVoltageSaturated() for inverter in vehicle.inverters),
         "traction_limited": vehicle.chassis.isTractionLimited(),
     }
 

@@ -1,3 +1,4 @@
+from copy import deepcopy
 from Vehicle.VehicleConfig import VehicleConfig
 from Functions.loadConfigs import loadConfigs
 
@@ -20,9 +21,11 @@ SR18 = VehicleConfig(
     brake=brakeConfigs.brake1,
     chassis=chassisConfigs.chassis1,
     driver=driverConfigs.driver1,
-    inverter=inverterConfigs.inverter1,
-    motor=motorConfigs.amk_dd5,
-    num_motors=4,    # 4 AMK hub motors, each with its own inverter
+    # 4 AMK hub motors, each with its own inverter: front left, front right, rear left, rear right
+    # copies, since each one keeps its own currents, angle and controller memory
+    inverters=[deepcopy(inverterConfigs.inverter1) for _ in range(4)],
+    motors=[deepcopy(motorConfigs.amk_dd5) for _ in range(4)],
+    num_motors=4,
     gear_ratio=11.81,    # motor to wheel, per hub motor
     tire=tireConfigs.tire1,
     vcu=vcuConfigs.vcu1,

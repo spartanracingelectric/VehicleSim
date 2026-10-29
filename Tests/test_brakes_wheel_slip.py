@@ -232,7 +232,7 @@ def test_negative_current_request_regens_and_slows_the_car():
         car.chassis.speed_mps = 20.0
     coast.advance(0.3, current_request_A=0.0)
     regen.advance(0.3, current_request_A=-60.0)
-    assert regen.getTorqueFeedback_Nm() < 0
+    assert all(torque_Nm < 0 for torque_Nm in regen.getTorqueFeedback_Nm())
     assert regen.battery.current_A < 0                       # charging the pack
     assert regen.chassis.speed_mps < coast.chassis.speed_mps - 1.0
     assert not regen.bms.isShutdown()

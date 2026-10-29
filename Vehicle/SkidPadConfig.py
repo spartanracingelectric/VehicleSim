@@ -61,7 +61,10 @@ class SkidPadConfig:
     def getWeight(self):
         return 9.81*self.mass
 
-    def getStaticTireLoads(self, wheelIndex):
+    def getStaticTireLoadAll(self):
+        return [self.getStaticTireLoadsPerTire(i) for i in range(4)]
+
+    def getStaticTireLoadsPerTire(self, wheelIndex):
         if wheelIndex in [0, 1]:
             return (self.getWeight() *  (1 - self.rear_weight_distribution)) / 2
         elif wheelIndex in [2, 3]:

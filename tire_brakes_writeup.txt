@@ -1,0 +1,82 @@
+tire stuff writeup
+
+so this is everything i did for tires, wheel slip and brakes. it all runs inside seong's powertrain sim so i merged VehSim-1 into TireSim to get his chassis code, and merged it again later to pick up his inverter current setpoint and advance() changes. i didn't touch the motor, inverter, battery, bms or vcu.
+
+quick slip refresher since everything depends on it. a tire only makes force when it slips a bit. slip ratio is (wheel speed * radius - car speed) / car speed, so 0 is just rolling, positive is driving, negative is braking and -1 is a locked wheel. slip angle is the sideways version, basically the angle between where the wheel points and where it's actually going. right now the sim is straight line only so slip angle is always 0.
+
+dugoff (TireConfig.py)
+this one already existed. the idea is you pretend the tire has infinite grip and get a linear force (stiffness times slip), then squash it if it's more than the road can give. the stiffness scales with load, 25.691 * Fz forwards and 33.959 * Fz sideways, those are from nelson's TTC data. lambda tells you how close you are to the friction limit, if it's under 1 the tire is sliding and the force gets scaled down so it never goes over mu * Fz. a locked wheel is 0/0 in the formula so that's special cased to just full sliding friction. the big thing dugoff doesn't have is a peak, more slip always gives a bit more force and it just flattens out at mu * Fz. real tires peak around 10-15% slip and then lose grip, which is why i also did magic formula. the only things i added to dugoff were calculateForces(Fz, slip ratio, slip angle) which runs the existing stuff in the right order in one call, and isAtGripLimit() which says when it's making 95% of mu * Fz.
+
+magic formula (MagicFormulaTireConfig.py)
+the formula is Fx = D sin(C atan(B k - E (B k - atan(B k)))) and same thing sideways with its own numbers. D is the peak force which is just mu * Fz. C is the shape, mostly how much grip is left when the tire is fully sliding (1.5 leaves about 71%), it has to be between 1 and 2. B is picked so B * C * D equals the slip stiffness, so i used the same 25.691 and 33.959 as dugoff, that way both models match at small slip and peak at the same force. E is how sharp the peak is, i left it at 0. C and E are just normal starting values for now, they still need to be fit to the TTC data.
+sanity check at 667 N: 0.01 slip gives 170 N (dugoff also 170), peak is 1000 N at 0.152 slip, and at slip of 1 it drops to 794 N while dugoff stays around 971.
+for slipping both ways at once (like braking in a corner) i divide each slip by the slip where its curve peaks and combine them, so the tire acts like it's that far along to the peak in both directions and the force gets split between them. with no slip angle it's exactly the normal formula.
+still not in there: mu changing with load, camber, aligning moment, loading .tir files.
+
+switching tires
+both tires have the same calls so the chassis doesn't care which one it gets. you pick in SR18.py, tire=tireConfigs.tire1 for dugoff or tireConfigs.tire1_mf for magic formula. the scenario summary prints which one ran.
+
+wheel slip (ChassisConfig.py, seong's file)
+before, the wheels just turned with the car and the force was capped at mu * weight. now each axle has its own wheel speed. every step the motor torque spins the wheel up, the brake slows it down, and the tire force pushes back on it. the slip from that goes into the tire model, the tire force pushes the car. so if there's too much torque the tire can't push back enough and the wheel spins up, and if there's too much brake the wheel stops while the car's still moving and you get lockup.
+wheel inertia is the wheel plus the motor rotor through the gearbox (Jm * 11.81^2). slip divides by car speed which is 0 when parked, so under 1 m/s it divides by 1 instead and the car just eases to a stop. weight moves to the rear when accelerating and to the front when braking (m * a * cg height / wheelbase). wheelbase, cg height and weight split are from tejas's SR_17 file and need checking for SR18. the motor speed now comes from the wheels instead of the car speed.
+
+brakes (BrakeConfig.py)
+pedal % gives a pedal force, times the pedal ratio, split front/rear by the balance bar, divided by the master cylinder area gives line pressure. torque at the wheel is 2 pads * pad mu * pressure * piston area * rotor radius. every number in brake1.py is a placeholder, i just picked them so the fronts lock before the rears (rears locking first spins the car). full pedal is about 1190 psi front. the brake can only slow the wheel down to a stop, it can't spin it backwards. no regen, that's the vcu firmware's job.
+to brake in a scenario you just add brake=hold(100) or any of the other pedal shapes.
+in VehicleConfig, update() and advance() take bps_percent as a keyword-only argument (update(apps, bps_percent=50)). it's keyword-only so his argument order (apps_percent, dt_s, torque_request_Nm, current_request_A) stays the same and his calls don't break. the brakes still apply when his torque_request_Nm / current_request_A skip the vcu.
+
+results
+braking from 60 km/h: full pedal stops in 9.2 m on dugoff and 11.1 m on magic formula. fronts start locking around 50% pedal, rears only lock at full pedal. the cool part is with magic formula the shortest stop is right before lockup (about 10.8 m at 50%) and locking makes it longer (12.1 m at 55%), basically why abs exists. dugoff doesn't show that since it has no peak.
+75 m accel is 4.37 s now, it was 3.98 s before (explained below).
+486 tests pass, 5 of seong's 6 scenarios pass. the sim runs about the same speed as before.
+
+stuff seong needs to look at
+1. accelerating takes weight off the front tires so they can't use all the motor torque and they spin like crazy since there's no traction control in the sim. there's only one simulated motor and it runs at the average wheel speed, so the spinning fronts push it to its rpm limit and the rear torque gets cut too. if i run the motor at the rear wheel speed instead the 75 m is 3.96 s. the fix is up to him, either simulate front and rear motors separately (it's already a todo in his code) or traction control.
+2. same reason, the "lift off at 2 s" scenario and the low battery check in powertrainTest fail because they expect the car to coast right when torque cuts, but the spinning front wheels keep pushing it for like 0.3 s.
+3. this was already in his code: if you start a run already moving with a 100% battery it crashes with "Pack SOC went outside the modeled range". my brake tests start at 95% to get around it.
+4. mu is 1.5 in tire1 but his readme numbers used 1.2, still need to sort that out with nelson.
+
+still todo
+real brake numbers, check the chassis numbers for SR18, fit C and E for magic formula, decide on mu, and the per axle motors / traction control thing.
+
+to run it: pytest Tests -q for everything, pytest Tests/scenarioTest.py -v for seong's scenarios, python Tests/tireTest.py to plot both tire curves.
+
+
+---------------------------------------------------------------------------------------------------
+journal entry: regen braking hook (2026-10-26)
+
+why
+the regen person on the team wants to know how regen braking fits into the sim, and how brake pressure turns into a current command for the inverter. i don't have access to the VCU code, so i didn't write any regen logic. i checked that the sim can already do regen, and added one small hook to the brakes so regen and friction can share a stop.
+
+what already worked (checked, not changed)
+the inverter takes a signed current_request_A (like a VESC set-current), so a negative one makes negative torque. that flows to the wheels as a braking torque and the pack charges. i ran it from 20 m/s with no pedal at 60% SOC: -20 A gives -4.4 Nm per motor, -60 A gives -13.2 Nm, -120 A gives -26.4 Nm (about 4.55 A per Nm), the pack current goes negative (charging) and the car slows more as the request gets bigger. the wheel torque is already motor torque * gear ratio / 4 wheels so the chassis treats regen the same as the brake.
+
+what i added
+1. BrakeConfig.update(bps_percent, regen_torque_Nm=0.0). regen_torque_Nm is the braking torque the motors are already putting on each wheel. the pedal is the total the driver asked for, so the friction brakes only make up the rest: friction torque = pedal torque - regen torque, never below 0. default is 0 so nothing changes if nobody uses regen.
+2. getFrontRequestedTorque_Nm() / getRearRequestedTorque_Nm(): the total braking the pedal is asking for per wheel (what a regen controller would split up). getFrontWheelTorque_Nm() / getRearWheelTorque_Nm() are now what the friction brakes still have to hold.
+3. line pressure is still the full pedal pressure, because that's what the real pressure sensor reads.
+4. VehicleConfig.update passes the regen torque to the brake automatically: if the motors are making negative torque, that much comes off the friction brakes. one line, in seong's file.
+5. 5 new tests in test_brakes_wheel_slip.py (hook math, friction never negative, negative current slows the car and charges the pack, regen replaces friction in the full car). 491 pass now.
+
+how brake pressure becomes a current command (for the regen person)
+brake pedal % -> brake.update() -> front/rear line pressure (getFrontPressure_Pa / getRearPressure_Pa, same as the log's Brake Pres Front/Rear) and the total braking torque the pedal wants per wheel (getFront/RearRequestedTorque_Nm)
+-> the regen controller decides how much of that the motors take, as a wheel torque
+-> motor torque = wheel torque / gear_ratio (11.81), per motor
+-> current = motor torque * about 4.55 A per Nm (motor.find_iq_desired(1.0, id), it depends on the motor and field weakening)
+-> send that as a negative current_request_A to vehicle.update() / advance(), along with the same bps_percent
+-> the brakes then back off by whatever the motors actually deliver
+so the simple first version is: regen takes a fraction of the pedal torque (capped by the limits below), the friction brakes cover the rest.
+
+what the regen person needs to know / limits i found
+- a pack near full can't take much charge. at 95% SOC, -60 A tripped the BMS overvoltage fault (a cell hit 4.219 V) after 0.05 s and shut the contactors, so the torque went to 0. at 60% SOC -60 A and -120 A are fine. the regen logic needs to back off as SOC and cell voltage go up.
+- the sim starts crashing with "Pack SOC went outside the modeled range" at 100% SOC when moving (already in the notes, item 3), so use 95% or less.
+- one motor is simulated for all 4, so regen is split evenly over all 4 wheels. a real car would probably regen on one axle only, and that changes brake balance and when each axle locks. that needs per axle motors (same todo as the front spin issue).
+- regen torque fades at low motor speed in real life, i haven't checked what the sim's speed fade (getSpeedFade) does for negative requests.
+- lockup: more regen on one axle means less friction there, but the tire doesn't care where the torque came from. the same slip and tire force loop applies, so too much total braking on an axle still locks it (a regen controller that ignores wheel slip could lock the drive axle).
+
+not done / needs integration
+- the regen logic itself (VCU firmware, not in this sim). right now the only way to test it is to pass current_request_A yourself.
+- no charge current limit from the BMS/pack is fed back to the request, the BMS only trips a fault after the fact.
+- the blend is "pedal is the total", which is a design choice. if the real car adds regen on top of the pedal, that's a one line change in VehicleConfig.update.
+- no scenario with regen yet (Tests/scenario.py only takes a throttle pedal and a brake pedal).
+- hydraulic lag and brake temperature are still not modelled.

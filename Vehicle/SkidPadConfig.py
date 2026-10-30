@@ -46,7 +46,7 @@ class SkidPadConfig:
         else:
             raise ValueError("Invalid wheel index")
 
-    def getWheelPostions(self, wheelIndex):
+    def getWheelPositions(self, wheelIndex):
         if wheelIndex==0:
             return (self.getCgToFrontAxle(), self.front_track / 2)
         if wheelIndex==1:
@@ -94,7 +94,7 @@ class SkidPadConfig:
             yaw = -(speed_mps / radius)
             center = (0.0, -radius)
         
-        wheel_positions = [self.getWheelPostions(i) for i in range(4)]
+        wheel_positions = [self.getWheelPositions(i) for i in range(4)]
         omega_wheels = []
         
         for x, y in wheel_positions:

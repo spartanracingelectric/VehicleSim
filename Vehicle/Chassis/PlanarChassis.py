@@ -43,3 +43,67 @@ def getCornerSlips(car, forward_speed_mps, sideways_slide_speed_mps, yaw_rate_ra
     return slip_ratios, slip_angles, wheel_forward_speeds
 
 
+def derivatives(x, inputs, car):
+    loads = getTireLoads_N(car, x[3], inputs["ax_mps2"], inputs["ay_mps2"])
+    slip_ratios, slip_angles, wheel_forward_speeds = getCornerSlips(car, x[3], x[4], x[5], x[6:10], inputs["steer_angles_rad"])
+    Force_x_tire = []
+    Force_y_tire = []
+    Force_x_body = []
+    Force_y_body = []
+    Tire_pos_x = []
+    Tire_pos_y = []
+    for i in range(4):
+        x_i, y_i = car.getWheelPositions(i)
+        Tire_pos_x.append(x_i)
+        Tire_pos_y.append(y_i)
+    for i in range(4):
+        Force_x_tire_i, Force_y_tire_i = car.tire.calculateForces(loads [i], slip_ratios[i], slip_angles[i])
+        Force_x_tire.append(Force_x_tire_i)
+        Force_y_tire.append(Force_y_tire_i)
+        Force_x_body_i= Force_x_tire_i * math.cos(inputs["steer_angles_rad"][i]) - Force_y_tire_i * math.sin(inputs["steer_angles_rad"][i])
+        Force_y_body_i= Force_x_tire_i * math.sin(inputs["steer_angles_rad"][i]) + Force_y_tire_i * math.cos(inputs["steer_angles_rad"][i])
+        Force_x_body.append(Force_x_body_i)
+        Force_y_body.append(Force_y_body_i)
+    Sum_Fx_body = sum(Force_x_body)
+    Sum_Fy_body = sum(Force_y_body)
+    Sum_Mz_body = sum(Force_y_body[i] * Tire_pos_x[i] - Force_x_body[i] * Tire_pos_y[i] for i in range(4)) + inputs["external_yaw_moment_Nm"]
+
+    drag= car.aero.getDrag_N(x[3])
+    roll=car.rolling_resistance * sum(loads) if x[3] > 0 else 0.0
+
+    forward_velocity_ROF= (Sum_Fx_body - drag - roll) / car.mass + x[4]*x[5]
+    lateral_velocity_ROF= (Sum_Fy_body) / car.mass - x[3]*x[5]
+    yaw_rate_ROF= Sum_Mz_body / car.yaw_inertia
+
+    x_rof= x[3]*math.cos(x[2]) - x[4]*math.sin(x[2])
+    y_rof= x[3]*math.sin(x[2]) + x[4]*math.cos(x[2])
+
+    yaw_rate= x[5]
+
+    wheel_angular_accel= []
+    for i in range(4):
+        T_i = inputs["wheel_torques_Nm"][i]
+        wheel_angular_accel.append((T_i - Force_x_tire[i] * car.wheel_radius) / car.getWheelSpinInertia())
+
+    outputs = {
+        "Fz_N": loads,
+        "Fx_N": Force_x_tire,
+        "Fy_N": Force_y_tire,
+        "slip_ratios": slip_ratios,
+        "slip_angles_rad": slip_angles,
+        "ax_mps2": (Sum_Fx_body - drag - roll) / car.mass,
+        "ay_mps2": Sum_Fy_body / car.mass,
+    }
+
+    dx= [
+        "forward_velocity_ROF": forward_velocity_ROF,
+        "lateral_velocity_ROF": lateral_velocity_ROF,
+        "yaw_rate_ROF": yaw_rate_ROF,
+        "x_rof": x_rof,
+        "y_rof": y_rof,
+        "yaw_rate": yaw_rate,
+        "wheel_angular_accel": wheel_angular_accel,
+    ]
+
+    return dx, outputs
+

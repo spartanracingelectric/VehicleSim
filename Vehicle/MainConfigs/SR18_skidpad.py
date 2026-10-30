@@ -5,14 +5,14 @@ from Vehicle.Aero.Configs.aero1 import aero1
 from Vehicle.Steering.Configs.steering1 import steering1
 
 SR18_skidpad = SkidPadConfig(
-    mass=288.0,                         # kg
-    wheelbase=1.53924,                  # m
-    rear_weight_distribution=0.50,      # unitless
-    cg_height=0.32512,                  # m
-    front_track=1.2065,                 # m
-    rear_track=1.2065,                  # m
-    front_lateral_transfer=0.45,        # no unit :p
-    yaw_inertia=110.0,                  # kg m^2
+    mass=277.6,                         # kg
+    wheelbase=1.530,                    # m
+    rear_weight_distribution=0.477,     # unitless
+    cg_height=0.303,                    # m
+    front_track=1.219,                  # m
+    rear_track=1.194,                   # m
+    front_lateral_transfer=0.413,       # no unit :p
+    yaw_inertia=115.0,                  # kg m^2 (verify)
     wheel_radius=0.2032,                # m
     wheel_inertia=0.225,                # kg m^2
     rotor_inertia=0.000274,             # kg m^2

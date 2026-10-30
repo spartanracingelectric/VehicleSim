@@ -95,15 +95,9 @@ def derivatives(x, inputs, car):
         "ay_mps2": Sum_Fy_body / car.mass,
     }
 
-    dx= [
-        "forward_velocity_ROF": forward_velocity_ROF,
-        "lateral_velocity_ROF": lateral_velocity_ROF,
-        "yaw_rate_ROF": yaw_rate_ROF,
-        "x_rof": x_rof,
-        "y_rof": y_rof,
-        "yaw_rate": yaw_rate,
-        "wheel_angular_accel": wheel_angular_accel,
-    ]
+    dx= [x_rof, y_rof, yaw_rate,
+      forward_velocity_ROF, lateral_velocity_ROF, yaw_rate_ROF,
+      *wheel_angular_accel]
 
     return dx, outputs
 

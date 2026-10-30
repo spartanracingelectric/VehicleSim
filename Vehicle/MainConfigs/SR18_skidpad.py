@@ -3,6 +3,8 @@ from Vehicle.SkidPadConfig import SkidPadConfig
 from Vehicle.Tire.Configs.tire_r20 import tire_r20
 from Vehicle.Aero.Configs.aero1 import aero1
 from Vehicle.Steering.Configs.steering1 import steering1
+from Vehicle.Motor.Configs.amk_limits import amk_limits
+
 
 SR18_skidpad = SkidPadConfig(
     mass=277.6,                         # kg
@@ -22,5 +24,5 @@ SR18_skidpad = SkidPadConfig(
     tire=tire_r20,
     aero=aero1,
     steering=steering1,
-    limits=None,
+    limits=amk_limits,
 )

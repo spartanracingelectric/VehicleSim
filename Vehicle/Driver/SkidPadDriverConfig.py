@@ -5,7 +5,7 @@ class SkidPadDriverConfig:
     def __init__(self, mode, target_speed_mps,  radius_m , turn, lookahead_m, wheelbase_m, speed_kp, speed_ki, max_wheeltorque_Nm, delta_rad = None, center_m = None):
         self.mode = mode
         self.target_speed_mps = target_speed_mps #target speed mps is a function of time, gives us target speed value at each time 
-        self.delta_red = delta_rad
+        self.delta_rad = delta_rad
         self.center_m = center_m
         self.radius_m = radius_m
         self.turn = turn
@@ -75,7 +75,7 @@ class SkidPadDriverConfig:
 
 
 
-            return delta, torque_command
+        return delta, torque_command
 
             
 

@@ -2,6 +2,7 @@ from Vehicle.SkidPadConfig import SkidPadConfig
 
 from Vehicle.Tire.Configs.tire_r20 import tire_r20
 from Vehicle.Aero.Configs.aero1 import aero1
+from Vehicle.Steering.Configs.steering1 import steering1
 
 SR18_skidpad = SkidPadConfig(
     mass=288.0,                         # kg
@@ -20,6 +21,6 @@ SR18_skidpad = SkidPadConfig(
     min_slip_speed=1.0,                 # m/s
     tire=tire_r20,
     aero=aero1,
-    steering=None,
+    steering=steering1,
     limits=None,
 )

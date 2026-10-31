@@ -1,0 +1,106 @@
+vehicle dynamics additions
+
+this is what i added on top of the tire, wheel slip, brake and regen work. the main
+thing here is a first order force filter for both tire models, plus the first usable
+version of steering and cornering. i also added the basic math for torque vectoring,
+but it is not wired into the car yet because the current powertrain still simulates
+one shared motor and inverter.
+
+first order tire filter
+
+the dugoff and magic formula tires both calculate force instantly from the current
+slip. that is fine for the equations, but it can make the force jump too sharply when
+the slip changes. both models now have an optional
+force_filter_time_constant_s parameter. the default is 0, which means filtering is
+off and all the old calls and results stay the same.
+
+the filter is in Functions/FirstOrderFilter.py and uses the backward-euler version of
+a first order low-pass filter:
+
+    y[k] = y[k-1] + alpha * (u[k] - y[k-1])
+    alpha = dt / (tau + dt)
+
+u is the raw tire force and y is the force sent back to the chassis. the first sample
+starts at the current force instead of starting at zero, so turning the filter on does
+not create a fake impulse at the beginning of a run. longitudinal and lateral force
+each have their own filter. calculateForces needs dt_s when filtering is enabled, and
+resetForceFilter() clears the filter for a new run.
+
+one thing to watch: the tire objects are stateful already, and the filter adds more
+state. a proper four-wheel model should give every wheel its own tire object instead
+of sharing one object between wheels.
+
+steering and cornering
+
+the chassis used to be straight line only. it now has steering_angle_rad as an
+optional input to vehicle.update() and vehicle.advance(). zero is the default, so the
+old straight line path is unchanged.
+
+SteeringConfig.py has the front-wheel Ackermann geometry. positive steering means a
+left turn, and the inside front wheel gets the larger angle so both front tires point
+toward the same turn center.
+
+when steering is nonzero, the chassis calculates front and rear slip angles from the
+local body velocity:
+
+    alpha_f = delta - atan2(v_y + a*r, v_x)
+    alpha_r =       -atan2(v_y - b*r, v_x)
+
+then the tire lateral forces update lateral velocity and yaw rate. the chassis also
+keeps heading and x/y position. the existing longitudinal wheel slip, wheel inertia,
+load transfer and speed calculation still run at the same time.
+
+this is a first cornering model, not a finished suspension model. it does not yet
+have lateral load transfer, camber, suspension compliance, aligning moment, or separate
+left and right tire loads. Tests/scenario.py now accepts a steering callback in radians
+and records steering angle, lateral velocity, yaw rate, heading, x and y.
+
+torque vectoring
+
+TorqueVectoringConfig.py contains the left/right allocator. if the car asks for total
+axle torque and a yaw moment, the requested torque difference is:
+
+    delta_T = 2 * M_z * R / track
+    T_left  = T_total / 2 - delta_T / 2
+    T_right = T_total / 2 + delta_T / 2
+
+a positive yaw request gives more torque to the right wheel, which produces a positive
+left-turn yaw moment with the sign convention used here. there is also an optional
+limit on the torque difference.
+
+this is only the allocator math for now. SR18 has four physical motors, but the
+simulator currently runs one motor/inverter pair and multiplies its battery current by
+num_motors. all wheels effectively receive the same torque and the motor speed is
+averaged. plugging the allocator in now would look like torque vectoring in the API
+without actually simulating independent motors.
+
+to connect it properly, the next step is separate motor and inverter state per wheel
+or axle. then the chassis needs separate wheel speeds, tire objects, normal loads,
+brake torques and slip feedback for all four wheels. that also gives us the signals
+needed for traction control.
+
+small simrunner fix
+
+simrunner.py had the speed-trace load commented out but still used sim.vel_mps in
+run(), so it failed before doing any work. it now loads the CSV when it exists. when
+the optional log is not present it creates a zero-speed trace so setup and import
+tests still work. that fallback is not meant to be a driving result.
+
+checks
+
+i added tests for the filter step and its timestep validation on both tire models,
+Ackermann inside/outside wheel angles, torque conservation and yaw sign in the torque
+allocator, and steering producing yaw and lateral motion.
+
+the new tests pass, and the full suite is 499 passed and 3 skipped. Pylance reports no
+errors in the changed Python files.
+
+still todo
+
+- check the SR18 wheelbase, track widths, CG height and weight distribution against
+  real vehicle data
+- fit the Pacejka C and E values to TTC data and agree on mu
+- add lateral load transfer and separate left/right tire instances
+- simulate independent motor/inverter states before enabling closed-loop torque
+  vectoring or traction control
+- add measured steering/yaw-rate scenarios

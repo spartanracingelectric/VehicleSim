@@ -8,6 +8,7 @@
 # Differences: his slip ratio divides by wheel speed and uses 1/(1 - k), which mixes two slip
 # conventions (his kappa/(1 - kappa) is our k, so his linear Fx is Cx k instead of Cx k / (1 + k))
 import numpy
+from Functions.FirstOrderFilter import FirstOrderFilter
 
 # Radius must be > 0, stiffnesses and friction can't be negative (None means not set yet)
 # Stiffness is either fixed (N per unit slip, N/rad) or per load (multiplied by Fz), not both
@@ -24,7 +25,8 @@ class TireConfig: #TODO: Add parameters related to tire
     tireCouplingFactor = 0.0 # dugoff lambda, dimensionless, how close the tire is to the friction limit
 
     def __init__(self, radius_m, longitudinal_stiffness=None, lateral_stiffness=None, tireroadfriction=None,
-                 longitudinal_stiffness_per_load=None, lateral_stiffness_per_load=None):
+                 longitudinal_stiffness_per_load=None, lateral_stiffness_per_load=None,
+                 force_filter_time_constant_s=0.0):
         if radius_m <= 0:
             raise ValueError(f"radius_m must be > 0, got {radius_m}")
         if longitudinal_stiffness is not None and longitudinal_stiffness < 0:
@@ -41,6 +43,8 @@ class TireConfig: #TODO: Add parameters related to tire
             raise ValueError("set longitudinal_stiffness or longitudinal_stiffness_per_load, not both")
         if lateral_stiffness is not None and lateral_stiffness_per_load is not None:
             raise ValueError("set lateral_stiffness or lateral_stiffness_per_load, not both")
+        if force_filter_time_constant_s < 0:
+            raise ValueError("force_filter_time_constant_s must be >= 0")
 
         self.radius_m = radius_m # radius of the tire in meters
         self.longitudinal_stiffness = longitudinal_stiffness # forward backwards motion
@@ -48,6 +52,9 @@ class TireConfig: #TODO: Add parameters related to tire
         self.tireroadfriction = tireroadfriction # friction between tire and road, can be set later
         self.longitudinal_stiffness_per_load = longitudinal_stiffness_per_load # longitudinal stiffness / Fz, stiffness grows with load
         self.lateral_stiffness_per_load = lateral_stiffness_per_load # lateral stiffness / Fz, stiffness grows with load
+        self.force_filter_time_constant_s = float(force_filter_time_constant_s)
+        self._longitudinal_force_filter = FirstOrderFilter(self.force_filter_time_constant_s)
+        self._lateral_force_filter = FirstOrderFilter(self.force_filter_time_constant_s)
 
     def calculateTireSlipAngle(self, wheel_angle, wheel_longitudinal_velocity, wheel_lateral_velocity):
         # Is the wheel pointing in the direction it should be pointing compared to the actual vehicle movement?
@@ -60,14 +67,25 @@ class TireConfig: #TODO: Add parameters related to tire
         self.tireSlipRatio = (wheel_speed - vehicle_speed) / vehicle_speed if vehicle_speed != 0 else 0.0
         return self.tireSlipRatio
 
-    def calculateForces(self, tireDownForce, slip_ratio, slip_angle):
+    def calculateForces(self, tireDownForce, slip_ratio, slip_angle, dt_s=None):
         # One call for the chassis, every tire model has this so they can be swapped (see MagicFormulaTireConfig)
         # same order as calling them one by one: slip ratio, slip angle, coupling, then the forces
         # slip comes in already calculated, the chassis owns the wheel and car speeds (and the low speed fix)
         self.tireSlipRatio = slip_ratio
         self.tireSlipAngle = slip_angle
         self.calculateCoupling(tireDownForce)
-        return self.calculateTireLongitudinalForce(), self.calculateTireLateralForce()
+        longitudinal_force = self.calculateTireLongitudinalForce()
+        lateral_force = self.calculateTireLateralForce()
+        if self.force_filter_time_constant_s:
+            if dt_s is None or dt_s <= 0:
+                raise ValueError("dt_s must be supplied when force filtering is enabled")
+            self.tireLongitudinalForce = self._longitudinal_force_filter.update(longitudinal_force, dt_s)
+            self.tireLateralForce = self._lateral_force_filter.update(lateral_force, dt_s)
+        return self.tireLongitudinalForce, self.tireLateralForce
+
+    def resetForceFilter(self):
+        self._longitudinal_force_filter.reset()
+        self._lateral_force_filter.reset()
 
     def isAtGripLimit(self):
         # At the top of the force curve after the last calculateForces: making 95% of mu Fz or more

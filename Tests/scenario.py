@@ -21,6 +21,7 @@ class Scenario:
     record_every_s: float = None                    # None = log every tick (100 us), long runs can log less often
     vehicle: object = None                          # None = SR18
     brake: Callable[[float], float] = None          # time (s) -> brake pedal % (BPS), same shapes as pedal, None = no brakes
+    steering: Callable[[float], float] = None      # time (s) -> steering angle (rad), None = straight
 
 def stopWhenBmsShutsDown(vehicle):
     return vehicle.bms.isShutdown()
@@ -36,7 +37,8 @@ def runScenario(scenario):
         time_s = tick * control_period_s
         apps_percent = scenario.pedal(time_s)
         bps_percent = scenario.brake(time_s) if scenario.brake is not None else 0.0
-        vehicle.update(apps_percent, bps_percent=bps_percent)
+        steering_angle_rad = scenario.steering(time_s) if scenario.steering is not None else 0.0
+        vehicle.update(apps_percent, bps_percent=bps_percent, steering_angle_rad=steering_angle_rad)
 
         finished = isFinished(scenario, vehicle)
         if tick % record_every == 0 or finished:
@@ -106,6 +108,12 @@ def readCar(vehicle, tick, time_s, apps_percent, bps_percent=0.0):
         "shutdown": vehicle.bms.isShutdown(),
         "voltage_saturated": vehicle.inverter.isVoltageSaturated(),
         "traction_limited": vehicle.chassis.isTractionLimited(),
+        "steering_angle_rad": vehicle.chassis.steering_angle_rad,
+        "lateral_velocity_mps": vehicle.chassis.lateral_velocity_mps,
+        "yaw_rate_radps": vehicle.chassis.yaw_rate_radps,
+        "heading_rad": vehicle.chassis.heading_rad,
+        "x_m": vehicle.chassis.x_m,
+        "y_m": vehicle.chassis.y_m,
     }
 
 # which faults are active at the end, for the summary

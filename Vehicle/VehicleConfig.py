@@ -45,7 +45,8 @@ class VehicleConfig:
     # e.g. the real VCU firmware in a SIL test (vcu.getTorqueRequest_Nm() then isn't updated):
     #   torque_request_Nm: the inverters are told a torque
     #   current_request_A: the inverters are told a current (A peak, like a VESC's set-current), see InverterConfig
-    def update(self, apps_percent=0.0, dt_s=5e-6, torque_request_Nm=None, current_request_A=None, *, bps_percent=0.0):
+    def update(self, apps_percent=0.0, dt_s=5e-6, torque_request_Nm=None, current_request_A=None, *, bps_percent=0.0,
+               steering_angle_rad=0.0):
         control_period_s = self.getControlPeriod_s()
         if torque_request_Nm is None and current_request_A is None:
             torque_request_Nm = self.vcu.update(apps_percent, control_period_s)
@@ -64,17 +65,19 @@ class VehicleConfig:
         # negative motor torque is regen braking: the friction brakes only make up the rest of the pedal
         self.brake.update(bps_percent, regen_torque_Nm=max(0.0, -self.getWheelTorque_Nm()))
         self.chassis.update(self.getWheelTorque_Nm(), self.brake.getFrontWheelTorque_Nm(), self.brake.getRearWheelTorque_Nm(),
-                            self.getDrivelineInertia_kgm2(), self.getMass_kg(), self.tire, control_period_s)
+                            self.getDrivelineInertia_kgm2(), self.getMass_kg(), self.tire, control_period_s,
+                            steering_angle_rad=steering_angle_rad)
 
         return self.torque_feedback_Nm
 
     # runs the car for duration_s: as many updates (inverter switching periods, 100 us) as fit, e.g. 100 for
     # one 10 ms VCU loop. same arguments as update(), held for the whole time
-    def advance(self, duration_s, apps_percent=0.0, torque_request_Nm=None, current_request_A=None, *, bps_percent=0.0):
+    def advance(self, duration_s, apps_percent=0.0, torque_request_Nm=None, current_request_A=None, *, bps_percent=0.0,
+                steering_angle_rad=0.0):
         # round, not int: 0.01 / 0.0001 is 99.99999999999999 in floating point
         for _ in range(round(duration_s / self.getControlPeriod_s())):
             self.update(apps_percent, torque_request_Nm=torque_request_Nm, current_request_A=current_request_A,
-                        bps_percent=bps_percent)
+                        bps_percent=bps_percent, steering_angle_rad=steering_angle_rad)
         return self.torque_feedback_Nm
 
     def updateDriving(self, torque_request_Nm, motor_speed_radps, dt_s, current_request_A=None):

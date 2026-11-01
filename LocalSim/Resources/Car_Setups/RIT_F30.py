@@ -46,8 +46,8 @@ class RIT_F30:
         # Tires (see the module docstring: the sheet's OpenLAP tyre model isn't used)
         self.tire_pressure_psi = tire_pressure_psi  # Constructor argument, as SR_17 (tire model and kt derive from it)
         self.tires_camber_sensitive = False
-        self.crr = 0.001                            # [sheet] Rolling resistance (sheet -0.001, OpenLAP's recommended
-                                                    # default; SR_17 uses 0.015)
+        self.crr = 0.015                            # [ASSUMED = SR_17/SR_18] Rolling resistance (the sheet's -0.001 is
+                                                    # OpenLAP's recommended default, not a measurement)
 
         # Suspension Parameters - Front           [ASSUMED = SR_17, all]
         self.spring_rate_front = 70050.73

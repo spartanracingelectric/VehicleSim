@@ -1,5 +1,20 @@
 # Tire_R20 — Pacejka Magic Formula fit for the Hoosier R20 compound
 
+## Tire models (Hoosier 16.0x7.5-10)
+
+| Model | File | What it is | Used by |
+|---|---|---|---|
+| R20_Legacy_Tire_Model | `Tire_R20/R20_Legacy_Tire_Model.py` | The original R20 fit (this README): all R20 sizes pooled, grip held at the peak, friction ellipse | SR_17 / SR_18 default: Skidpad, Autocross |
+| R20_V1_Tire_Model | `Tire_R20/R20_V1_Tire_Model.py` | Legacy lateral curve + refit longitudinal curve whose grip falls off with wheelspin | Base for R20_V2 and LC0_V1 |
+| R20_V2_Tire_Model | `Tire_R20/R20_V2_Tire_Model.py` | V1's longitudinal curve + a 16x7.5-10 lateral fit with camber + measured (MF) combined slip | Default `TIRE` in the Accel sims |
+| LC0_V1_Tire_Model | `Tire_LC0/LC0_V1_Tire_Model.py` | The LC0 compound, built like R20_V1 | Base for LC0_V2 |
+| LC0_V2_Tire_Model | `Tire_LC0/LC0_V2_Tire_Model.py` | LC0_V1's longitudinal curve + a refit lateral curve with camber + measured (MF) combined slip, built like R20_V2 | Other `TIRE` choice in the Accel sims |
+
+The fitting scripts and TTC data for the V1 and V2 models live in the team's Simulations
+folder; only the model files are copied here.
+
+## R20_Legacy_Tire_Model
+
 Built from real Calspan TTC Round 9 (project 2356) raw run data, to replace
 the monotonically-saturating Dugoff model in `SR_17.py`/`SR_18.py` with one
 that has a genuine slip-ratio/slip-angle **peak followed by a falloff**,
@@ -47,7 +62,7 @@ needlessly leaving force on the table there).
    Results: longitudinal R²=0.947 (RMSE 403.6 N, n=22,497 after subsampling),
    lateral R²=0.988 (RMSE 170.5 N, n=114,725). Saves `pacejka_r20_coeffs.npz`
    and `pacejka_r20_fit.png` (fit vs raw scatter at several loads).
-4. `Pacejka_R20.py` — the actual tire model class, same interface style as
+4. `R20_Legacy_Tire_Model.py` — the actual tire model class, same interface style as
    `SR_17`/`SR_18` (`tire_forces(fz, kappa, alpha)`, `tire_slip_ratio`).
 
 ## Key results
@@ -66,7 +81,7 @@ needlessly leaving force on the table there).
   `sin(C*atan(...))` form crosses back through zero and goes *negative*
   around kappa≈0.57, which is physically wrong and a real risk given this
   project's sims have already produced transient wheelspin above 70% slip.
-  `Pacejka_R20.tire_forces` clamps to that data-supported range and holds the
+  `R20_Legacy_Tire_Model.tire_forces` clamps to that data-supported range and holds the
   boundary value flat beyond it.
 
 ## Scope / not done
@@ -76,7 +91,7 @@ needlessly leaving force on the table there).
   `tires_camber_sensitive` comment), so camber sweep points were pooled in
   as ordinary data rather than fit as a separate term.
 - **No independent combined-slip fit** — this TTC round has no combined
-  slip-ratio + slip-angle sweep to fit against. `Pacejka_R20.tire_forces`
+  slip-ratio + slip-angle sweep to fit against. `R20_Legacy_Tire_Model.tire_forces`
   falls back to an approximate friction-circle scaling (clip both pure-slip
   values down if their combined magnitude, each normalized by its own axis's
   peak force at that Fz, exceeds 1) when both kappa and alpha are nonzero —

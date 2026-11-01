@@ -1,3 +1,8 @@
+# Tire model: "R20_V2" (R20_V2_Tire_Model) or "LC0_V2" (LC0_V2_Tire_Model); both Hoosier
+# 16.0x7.5-10, see Resources/Tire_R20/ and Resources/Tire_LC0/. The baseline and every
+# sweep use this tire.
+TIRE = "R20_V2"
+
 # Accel setup: the baseline and every sweep start from these instead of SR_17's own
 # defaults (which the other sims keep: 8 psi, final drive 2.7)
 TIRE_PSI = 8.0
@@ -22,11 +27,20 @@ sys.path.insert(0, str(RESOURCES_DIR / "Car_Setups"))
 import numpy as np
 import matplotlib.pyplot as plt
 from SR_17 import SR_17
+sys.path.insert(0, str(RESOURCES_DIR / "Tire_R20"))
+sys.path.insert(0, str(RESOURCES_DIR / "Tire_LC0"))
+from R20_V2_Tire_Model import R20_V2_Tire_Model
+from LC0_V2_Tire_Model import LC0_V2_Tire_Model
 
-def make_car():
-    """SR_17 set up for Accel (TIRE_PSI, FINAL_DRIVE_RATIO)."""
+TIRE_MODELS = {"R20_V2": R20_V2_Tire_Model, "LC0_V2": LC0_V2_Tire_Model}
+
+def make_car(tire=None):
+    """SR_17 set up for Accel (TIRE_PSI, FINAL_DRIVE_RATIO) on the chosen tire (default
+    TIRE). Both models' longitudinal grip drops off with wheelspin instead of holding at
+    the peak. The other sims keep SR_17's own R20_Legacy_Tire_Model."""
     car = SR_17(tire_pressure_psi=TIRE_PSI)
     car.final_drive_ratio = FINAL_DRIVE_RATIO
+    car._tire_model = TIRE_MODELS[tire or TIRE](wheel_radius=car.wheel_radius, psi=car.tire_pressure_psi)
     return car
 
 def simulate_75m_accel(car, target_distance=75.0, dt=0.0005, locked_diff=True):
@@ -47,8 +61,9 @@ def simulate_75m_accel(car, target_distance=75.0, dt=0.0005, locked_diff=True):
         gets whatever torque its own shaft carries (more to the wheel with more grip).
         Open diff: both half-shafts always get equal torque, so one spinning wheel
         cuts torque to both.
-      - Tires: car.tire_forces (Pacejka R20 fit to TTC data, scaled by
-        TRACK_GRIP_SCALE). Force holds flat at its peak beyond peak slip.
+      - Tires: car.tire_forces from the tire model make_car picks (TIRE: R20_V2 or
+        LC0_V2; fit to TTC data, scaled by TRACK_GRIP_SCALE). Grip falls off past the
+        peak slip ratio, so wheelspin costs traction.
       - Motor: torque curve x throttle_request, capped by car.power_limit.
       - Launch control: proportional torque cut when the worse rear wheel's slip
         exceeds car.target_slip_ratio.
@@ -214,6 +229,7 @@ print(f"Elapsed Time: {elapsed_time:.3f} s")
 print(f"Trap Speed:   {sim_log['v'][-1]:.2f} km/h")
 print(f"Max Accel:    {max(sim_log['a']):.2f} g")
 print(f"Max Slip:     RL {max(sim_log['slip_rl']) * 100:.1f} %, RR {max(sim_log['slip_rr']) * 100:.1f} %")
+print(f"Tire:         {TIRE} ({fsae_car.tire_pressure_psi:g} psi)")
 
 # Baseline slip ratio vs. distance for both rear wheels (they should overlap, since
 # straight-line loads are identical left/right)
@@ -222,7 +238,7 @@ plt.plot(sim_log['x'], np.array(sim_log['slip_rl']) * 100.0, label="Rear Left")
 plt.plot(sim_log['x'], np.array(sim_log['slip_rr']) * 100.0, label="Rear Right", linestyle='--')
 plt.xlabel("Distance [m]")
 plt.ylabel("Slip Ratio [%]")
-plt.title("SR_17 75m Acceleration Slip Ratio vs. Distance")
+plt.title(f"SR_17 75m Acceleration Slip Ratio vs. Distance ({TIRE} tire)")
 plt.legend()
 plt.grid(True)
 slip_trace_path = OUTPUT_DIR / "SR_17_accel_slip_trace.png"
@@ -247,7 +263,7 @@ if RUN_FINAL_DRIVE_RATIO_SWEEP:
     plt.plot(final_drive_ratios, accel_times_vs_ratio, marker='o', markersize=3)
     plt.xlabel("Final Drive Ratio")
     plt.ylabel("75m Elapsed Time (s)")
-    plt.title("SR_17 75m Acceleration Time vs. Final Drive Ratio")
+    plt.title(f"SR_17 75m Acceleration Time vs. Final Drive Ratio ({TIRE} tire)")
     plt.grid(True)
     graph_path = OUTPUT_DIR / "SR_17_accel_final_drive_ratio_sweep.png"
     plt.savefig(graph_path, dpi=150)
@@ -270,7 +286,7 @@ if RUN_TARGET_SLIP_RATIO_SWEEP:
     plt.plot(target_slip_ratios, accel_times_vs_slip, marker='o', markersize=3)
     plt.xlabel("Target Slip Ratio")
     plt.ylabel("75m Elapsed Time (s)")
-    plt.title("SR_17 75m Acceleration Time vs. Target Slip Ratio")
+    plt.title(f"SR_17 75m Acceleration Time vs. Target Slip Ratio ({TIRE} tire)")
     plt.grid(True)
     slip_graph_path = OUTPUT_DIR / "SR_17_accel_target_slip_ratio_sweep.png"
     plt.savefig(slip_graph_path, dpi=150)

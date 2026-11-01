@@ -4,7 +4,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "Tire_R20"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))      # AMK_DD5_motor.py, next to this file
 
 import numpy as np
-from Pacejka_R20 import Pacejka_R20
+from R20_Legacy_Tire_Model import R20_Legacy_Tire_Model
 from AMK_DD5_motor import amk_dd5
 
 class SR_18:
@@ -20,7 +20,7 @@ class SR_18:
         self.rotational_inertia_factor = 1.07       # Rotational mass correction factor (~7%, more rotating driveline mass with 4 motors)
         self.wheelbase = 1.53924                    # Wheelbase L (m)
         self.cg_height = 0.32512                    # Center of gravity height h_cg (m)
-        self.static_rear_bias = 0.50                # Near 50/50 static weight split (front motors added for AWD)
+        self.static_rear_bias = 0.477               # 47.7% static weight on rear axle (52.3% front)
         self.wheel_radius = 0.203                   # Effective tire radius (m)
 
         # Aerodynamics Parameters
@@ -33,7 +33,7 @@ class SR_18:
         # Tire Model
         # 
         # Same as SR_17.py (same physical tire, front & rear): tire_forces()/
-        # tire_slip_ratio() below delegate to Pacejka_R20 (Tire_R20/Pacejka_R20.py), a Magic
+        # tire_slip_ratio() below delegate to R20_Legacy_Tire_Model (Tire_R20/R20_Legacy_Tire_Model.py), a Magic
         # Formula pure-slip model fit directly to real Calspan TTC Round 9 raw data for this
         # R20 compound (pooled across all 4 R20 carcass sizes tested that round - see
         # Tire_R20/README.md). Unlike the Dugoff model this replaced, it has a genuine peak
@@ -43,7 +43,7 @@ class SR_18:
         # below) now reads the real load-dependent peak off the fitted curves instead.
         self.tire_pressure_psi = tire_pressure_psi  # Set per event via the constructor, e.g. SR_18(tire_pressure_psi=8.0)
                                          # - the TTC sweep tested 8/10/12/14 psi (see the Run Guide's pressure
-                                         # schedule), and both Pacejka_R20 (below) and tire_vertical_spring_rate
+                                         # schedule), and both R20_Legacy_Tire_Model (below) and tire_vertical_spring_rate
                                          # interpolate their real fitted/measured values between those
                                          # setpoints, clamped to that 8-14 psi range. A constructor argument
                                          # rather than a plain post-construction attribute because both of
@@ -52,7 +52,7 @@ class SR_18:
                                          # car.tire_pressure_psi after construction would NOT retroactively
                                          # update either of them.
         self.tires_camber_sensitive = False         # Per earlier TTC review: no meaningful camber sensitivity found
-                                                    # (Pacejka_R20 pools camber-sweep points as ordinary data rather
+                                                    # (R20_Legacy_Tire_Model pools camber-sweep points as ordinary data rather
                                                     # than fitting a separate camber term, consistent with this)
         
         self.crr = 0.015                            # Rolling resistance coefficient
@@ -137,7 +137,7 @@ class SR_18:
         self.rpm_points = self.motor_map.rpm_points
         self.torque_points = self.motor_map.torque_points
 
-        self._tire_model = Pacejka_R20(wheel_radius=self.wheel_radius, psi=self.tire_pressure_psi)
+        self._tire_model = R20_Legacy_Tire_Model(wheel_radius=self.wheel_radius, psi=self.tire_pressure_psi)
 
     def get_motor_torque(self, rpm):
         """Linearly interpolates per-motor torque from the RPM curve (0 past the speed limit)."""
@@ -145,7 +145,7 @@ class SR_18:
 
     def tire_slip_ratio(self, wheel_omega, vx):
         """Longitudinal slip ratio kappa from wheel angular speed and vehicle speed -
-        delegates to Pacejka_R20 (same convention as before: denominator is wheel surface
+        delegates to R20_Legacy_Tire_Model (same convention as before: denominator is wheel surface
         speed, not vx)."""
         return self._tire_model.tire_slip_ratio(wheel_omega, vx)
 
@@ -159,7 +159,7 @@ class SR_18:
         0.18 or alpha~11-12 deg) and falls off past it, rather than only ever saturating
         toward a friction-circle limit. Combined slip (both kappa and alpha nonzero) isn't
         independently fit - no such TTC sweep exists in this dataset - so it falls back to
-        an approximate friction-circle scaling; see Pacejka_R20's docstring.
+        an approximate friction-circle scaling; see R20_Legacy_Tire_Model's docstring.
         """
         return self._tire_model.tire_forces(fz, kappa, alpha)
 

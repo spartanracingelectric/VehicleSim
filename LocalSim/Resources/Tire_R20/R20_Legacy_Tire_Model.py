@@ -12,7 +12,7 @@ def _find_x_peak(C, E, x_max, n=20000):
     ys = np.sin(C * np.arctan(xs - E * (xs - np.arctan(xs))))
     return float(xs[int(np.argmax(ys))])
 
-class Pacejka_R20:
+class R20_Legacy_Tire_Model:
     """Pure-slip Pacejka 'Magic Formula' tire model for the Hoosier R20 compound,
     fit directly to real Calspan TTC Round 9 (project 2356) raw run data - see
     build_dataset.py and fit_pacejka_by_pressure.py in this folder for the full

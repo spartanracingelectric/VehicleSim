@@ -414,7 +414,7 @@ if __name__ == "__main__":
             plt.figure(figsize=(8, 5))
             plt.plot(psi_values, corrected_times_vs_psi, marker='o', markersize=3)
             plt.axvline(8.0, color='gray', linestyle='--', linewidth=1,
-                        label="8 psi: lowest pressure Pacejka_R20 has fitted data for")
+                        label="8 psi: lowest pressure R20_Legacy_Tire_Model has fitted data for")
             plt.xlabel("Tire Pressure [psi]")
             plt.ylabel("Corrected Time (s)")
             plt.title(f"{key} Skidpad Corrected Time vs. Tire Pressure")

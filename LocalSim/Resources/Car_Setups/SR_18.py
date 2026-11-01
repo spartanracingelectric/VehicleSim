@@ -87,7 +87,7 @@ class SR_18:
         # Drivetrain & Motor Parameters (4-motor AWD, one AMK DD5-14-10-POW per wheel)
         self.num_motors = 4             # One motor per wheel
         self.final_drive_ratio = 11.81      # Fixed single-stage final drive ratio (per motor)
-        self.drivetrain_efficiency = 0.98  # Single-stage final drive only - the motors' own losses come from
+        self.drivetrain_efficiency = 0.94  # Single-stage final drive (gearbox) only - the motors' own losses come from
                                             # motor_map below (they vary with speed and torque)
         self.motor_map = amk_dd5()      # AMK DD5-14-10-POW efficiency map (AC in -> shaft, 100 C, 600 V DC bus)
                                          # and max torque line, digitized from AMK's chart - see AMK_DD5_motor.py.

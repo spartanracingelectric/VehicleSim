@@ -10,7 +10,7 @@ TIRE_PSI = 8.0
 # Sweep settings: turn each sweep on/off and set its range as (start, end, step),
 # end included. Each sweep re-runs the full sim once per value.
 RUN_FINAL_DRIVE_RATIO_SWEEP = True
-FINAL_DRIVE_RATIO_RANGE = (10.0, 15.0, 0.1)
+FINAL_DRIVE_RATIO_RANGE = (10.0, 25.0, 0.1)
 
 RUN_TORQUE_SPLIT_SWEEP = True
 TORQUE_SPLIT_RANGE = (0.01, 0.99, 0.01)        # fraction of torque to the front axle

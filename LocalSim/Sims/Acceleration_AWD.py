@@ -1,3 +1,7 @@
+# Accel setup: the baseline and every sweep start from this tire pressure instead of
+# SR_18's own default (12 psi, which the other sims keep)
+TIRE_PSI = 8.0
+
 # Sweep settings: turn each sweep on/off and set its range as (start, end, step),
 # end included. Each sweep re-runs the full sim once per value.
 RUN_FINAL_DRIVE_RATIO_SWEEP = True
@@ -20,6 +24,10 @@ sys.path.insert(0, str(RESOURCES_DIR / "Car_Setups"))
 import numpy as np
 import matplotlib.pyplot as plt
 from SR_18 import SR_18
+
+def make_car():
+    """SR_18 set up for Accel (TIRE_PSI)."""
+    return SR_18(tire_pressure_psi=TIRE_PSI)
 
 def simulate_75m_accel(car, target_distance=75.0, dt=0.0005):
     """Simulates a straight-line run over target_distance (m) using semi-implicit
@@ -272,7 +280,7 @@ def simulate_75m_accel(car, target_distance=75.0, dt=0.0005):
     return t, log
 
 # Baseline run
-sr18_car = SR_18()
+sr18_car = make_car()
 elapsed_time, sim_log = simulate_75m_accel(sr18_car)
 
 print(f"--- FSAE 75m Acceleration Simulation (4-Motor AWD Electric) ---")
@@ -303,7 +311,7 @@ if RUN_FINAL_DRIVE_RATIO_SWEEP:
     final_drive_ratios = sweep_values(*FINAL_DRIVE_RATIO_RANGE)
     accel_times_vs_ratio = []
     for ratio in final_drive_ratios:
-        sweep_car = SR_18()
+        sweep_car = make_car()
         sweep_car.final_drive_ratio = ratio
         sweep_time, _ = simulate_75m_accel(sweep_car)
         accel_times_vs_ratio.append(sweep_time)
@@ -323,7 +331,7 @@ if RUN_TORQUE_SPLIT_SWEEP:
     torque_splits = sweep_values(*TORQUE_SPLIT_RANGE)
     accel_times_vs_split = []
     for split in torque_splits:
-        sweep_car = SR_18()
+        sweep_car = make_car()
         sweep_car.torque_split_front = split
         sweep_time, _ = simulate_75m_accel(sweep_car)
         accel_times_vs_split.append(sweep_time)
@@ -345,7 +353,7 @@ if RUN_TARGET_SLIP_RATIO_SWEEP:
     target_slip_ratios = sweep_values(*TARGET_SLIP_RATIO_RANGE)
     accel_times_vs_slip = []
     for tsr in target_slip_ratios:
-        sweep_car = SR_18()
+        sweep_car = make_car()
         sweep_car.enable_launch_control = True
         sweep_car.target_slip_ratio = tsr
         sweep_time, _ = simulate_75m_accel(sweep_car)

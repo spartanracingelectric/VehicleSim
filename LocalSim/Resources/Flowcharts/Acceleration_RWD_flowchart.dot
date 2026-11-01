@@ -41,7 +41,7 @@ digraph AccelRWD {
         tire [label="Pacejka tire model, per rear wheel\nf_traction = sum of RL + RR", fillcolor="#fdf1d6"];
         rpm [label="motor_rpm from ω_motor_side × final_drive_ratio", fillcolor="#fdf1d6"];
         torque [label="Motor torque curve × throttle_request", fillcolor="#fdf1d6"];
-        plimit [label="Cap torque × speed at power_limit", fillcolor="#fdf1d6"];
+        plimit [label="Cap torque × speed at\npower_limit × battery_to_motor_efficiency", fillcolor="#fdf1d6"];
         launch [label="launch control on\nand slip > target?", shape=diamond, fillcolor="#f6dbdb", fontsize=10];
         backoff [label="Reduce torque command\nproportional to slip error", fillcolor="#fdf1d6"];
         driveline [label="Driveline ODE: motor inertia → diff\n→ 2 half-shafts → 2 rear wheels\n(locked diff by default; open optional)", fillcolor="#fdf1d6"];

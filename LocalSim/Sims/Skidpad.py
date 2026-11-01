@@ -65,19 +65,30 @@ def available_forces(car, v, radius, aero_yaw_derate=1.0):
     # Rolling resistance on total tire load (weight + downforce)
     f_rr = car.crr * (car.mass * g + aero_downforce(car, v, aero_yaw_derate))
 
-    # Drive force limit: motor torque at the RPM set by final_drive_ratio, with total
-    # torque x speed across all motors capped at power_limit. drivetrain_efficiency is
-    # applied after, so this acts as a battery-side cap (inverter losses not modeled).
+    # Drive force limit: motor torque at the RPM set by final_drive_ratio, with the
+    # power going into all motors capped at the power reaching them (power_limit is at
+    # the battery pack, so the motors get power_limit x battery_to_motor_efficiency).
+    #   - With a motor efficiency map (car.motor_map): each motor's input power is
+    #     torque x speed / efficiency from the map, and drivetrain_efficiency is the
+    #     final drive only.
+    #   - Without one: input power is taken as torque x speed, and drivetrain_efficiency
+    #     (motor + gearbox losses) is applied after.
     # A car without power_limit is left uncapped.
     wheel_rad_s = v / car.wheel_radius
     motor_rpm = (wheel_rad_s * 60.0) / (2.0 * np.pi) * car.final_drive_ratio
     motor_omega = motor_rpm * (2.0 * np.pi) / 60.0
     torque_avail = car.get_motor_torque(motor_rpm)
     power_limit = getattr(car, 'power_limit', None)
+    motor_map = getattr(car, 'motor_map', None)
     if power_limit is not None and motor_omega > 1e-6:
-        power_draw_total = num_driven_motors * torque_avail * motor_omega
-        if power_draw_total > power_limit:
-            torque_avail = power_limit / (num_driven_motors * motor_omega)
+        power_limit *= getattr(car, 'battery_to_motor_efficiency', 1.0)
+        if motor_map is not None:
+            torque_avail = motor_map.torque_at_input_power(motor_rpm, power_limit / num_driven_motors,
+                                                           float(torque_avail))
+        else:
+            power_draw_total = num_driven_motors * torque_avail * motor_omega
+            if power_draw_total > power_limit:
+                torque_avail = power_limit / (num_driven_motors * motor_omega)
     wheel_torque = torque_avail * car.final_drive_ratio * car.drivetrain_efficiency
     f_long_achievable = num_driven_motors * wheel_torque / car.wheel_radius
 

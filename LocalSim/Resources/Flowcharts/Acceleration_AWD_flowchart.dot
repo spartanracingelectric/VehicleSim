@@ -17,7 +17,7 @@ digraph AccelAWD {
     subgraph cluster_inputs {
         label="INPUTS";
         style="dashed"; color="#999999"; fontcolor="#777777"; fontsize=13; labeljust=l;
-        car [label="car: SR_18 instance\nmass, geometry, per-axle spring/damper rates,\nmotor torque curve, Pacejka tire model,\naero coeffs, drivetrain params,\ntorque_split_front, power_limit", fillcolor="#dbe9f6"];
+        car [label="car: SR_18 instance\nmass, geometry, per-axle spring/damper rates,\nmotor torque curve + AMK efficiency map,\nPacejka tire model,\naero coeffs, drivetrain params,\ntorque_split_front, power_limit", fillcolor="#dbe9f6"];
         params [label="target_distance = 75 m\ndt = 0.0005 s", fillcolor="#dbe9f6"];
     }
 
@@ -42,8 +42,8 @@ digraph AccelAWD {
         rpm [label="motor_rpm per wheel from\nω_motor × final_drive_ratio", fillcolor="#fdf1d6"];
         split [label="Normalize torque_split_front\n→ front_throttle_frac, rear_throttle_frac\n(holds commanded axle ratio)", fillcolor="#fdf1d6"];
         torque [label="Motor torque curve × throttle_request\n× per-axle throttle_frac\n× per-wheel launch control cut\n(if slip > target_slip_ratio)", fillcolor="#fdf1d6"];
-        plimit [label="Combined power_limit check (all 4 motors)\n→ scale every motor equally if exceeded", fillcolor="#fdf1d6"];
-        shaft [label="Torque to shaft, per wheel\n(motors_per_wheel × torque × final_drive_ratio × efficiency)", fillcolor="#fdf1d6"];
+        plimit [label="Combined motor input power (all 4 motors):\nΣ torque × speed ÷ map efficiency(rpm, torque)\nvs. power_limit × battery_to_motor_efficiency\n→ scale every motor equally if exceeded", fillcolor="#fdf1d6"];
+        shaft [label="Torque to shaft, per wheel\n(motors_per_wheel × torque × final_drive_ratio\n× final drive efficiency)", fillcolor="#fdf1d6"];
         driveline [label="Two-mass torsional driveline ODE, per wheel\n(motor inertia ↔ half-shaft ↔ wheel inertia)\nall 4 independent, no diff", fillcolor="#fdf1d6"];
         rr [label="Rolling resistance f_rr\n= crr × (weight + downforce)", fillcolor="#fdf1d6"];
         accel [label="a = (f_traction − f_drag − f_rr) / car.mass\n(all 4 wheels' inertia already explicit above)", fillcolor="#fdf1d6"];

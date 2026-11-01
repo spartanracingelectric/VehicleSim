@@ -1,14 +1,16 @@
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "Tire_R20"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))      # AMK_DD5_motor.py, next to this file
 
 import numpy as np
 from Pacejka_R20 import Pacejka_R20
+from AMK_DD5_motor import amk_dd5
 
 class SR_18:
     def __init__(self, tire_pressure_psi=12.0):
         # Mass & Geometry Parameters
-        self.mass = 288.0                           # Total mass with driver (kg) - AMK DD5 motors are light (3.55 kg each, 14.2 kg total),
+        self.mass = 277.78                          # Total mass with driver (kg) - AMK DD5 motors are light (3.55 kg each, 14.2 kg total),
                                                     # but 4 corners each need their own inverter/wiring/final drive hardware vs SR_17's single unit
         self.unsprung_mass_corner = 16      # Wheel/tire/upright/brake mass, per corner (kg) - same corner hardware as SR_17;
                                                     # not re-measured for the in-wheel AMK motor's added unsprung mass
@@ -85,17 +87,25 @@ class SR_18:
         # Drivetrain & Motor Parameters (4-motor AWD, one AMK DD5-14-10-POW per wheel)
         self.num_motors = 4             # One motor per wheel
         self.final_drive_ratio = 11.81      # Fixed single-stage final drive ratio (per motor)
-        self.drivetrain_efficiency = 0.94  # Liquid-cooled synchronous motor + single-stage final drive
+        self.drivetrain_efficiency = 0.98  # Single-stage final drive only - the motors' own losses come from
+                                            # motor_map below (they vary with speed and torque)
+        self.motor_map = amk_dd5()      # AMK DD5-14-10-POW efficiency map (AC in -> shaft, 100 C, 600 V DC bus)
+                                         # and max torque line, digitized from AMK's chart - see AMK_DD5_motor.py.
+                                         # The sims use it for the power limit: each motor's AC input =
+                                         # torque x speed / map efficiency, and all motors' input together must
+                                         # fit within power_limit x battery_to_motor_efficiency
         self.torque_split_front = 0.50  # Fraction of commanded drive torque sent to the front axle (rear gets the rest);
                                          # all 4 motors are identical hardware, so this is a controller torque-vectoring
                                          # bias, not a difference in motor capability
         self.throttle_request = 1.0     # Driver torque request, as a fraction of each motor's available torque
         self.speed_limit_rpm = 20000    # Motor's mechanical speed limit "Nmax" (AMK DD5-14-10-POW datasheet) -
-                                         # separate from the 18617 RPM theoretical no-load point already built
-                                         # into the torque curve below
-        self.power_limit = 80000.0      # Electrical power limit from the inverter/accumulator (W), shared across
-                                         # all 4 motors - same accumulator as SR_17 (rules-limited, not motor-count-
-                                         # dependent), independent of any single motor's torque curve
+                                         # also where the map's max torque line ends
+        self.power_limit = 80000.0      # Battery pack power limit (W), measured at the accumulator output, shared
+                                         # across all 4 motors - same accumulator as SR_17 (rules-limited, not motor-
+                                         # count-dependent), independent of any single motor's torque curve
+        self.battery_to_motor_efficiency = 0.95  # Pack -> motors efficiency (wiring + 4 inverters): the motors
+                                                 # together get power_limit x this (the efficiency map
+                                                 # excludes inverter losses, so they stay here)
         self.rotor_inertia = 0.000274    # Bare rotor inertia, per motor, unreflected by the final drive ratio (kg*m^2) -
                                           # AMK DD5-14-10-POW datasheet: J = 2.74 kgcm^2
         self.half_shaft_stiffness = 3000.0  # Axle-level effective driveline torsional stiffness, motor/final drive
@@ -120,13 +130,12 @@ class SR_18:
         self.slip_control_gain = 12.0     # Proportional gain reining in torque once slip exceeds target
 
         # Motor Torque Curve: (RPM, Torque in Nm) - AMK DD5-14-10-POW, liquid cooled
-        # Flat peak torque (Mmax = 21 Nm) up to the 12000 RPM rated speed, then constant-power
-        # roll-off (peak power extrapolated as Mmax/Mn * Pn = 21/9.8 * 12.3 kW ~= 26.4 kW, scaling
-        # the datasheet's rated 12.3 kW/9.8 Nm point by the peak/rated torque ratio) down to zero
-        # torque at the 18617 RPM theoretical no-load speed.
+        # The max torque line from AMK's characteristic map at 600 V DC (105 A), every 50 rpm:
+        # ~21.5 Nm at low speed easing to ~19.9 Nm at 16400 rpm, then falling to ~16.8 Nm at the
+        # 20000 rpm speed limit (zero beyond it). This is shaft torque, before the final drive.
         # This curve is per-motor; total torque at a wheel is this value (4 independent motors, one per wheel).
-        self.rpm_points = np.array([0, 12000, 15000, 18617])
-        self.torque_points = np.array([21.0, 21.0, 16.8, 0.0])
+        self.rpm_points = self.motor_map.rpm_points
+        self.torque_points = self.motor_map.torque_points
 
         self._tire_model = Pacejka_R20(wheel_radius=self.wheel_radius, psi=self.tire_pressure_psi)
 

@@ -123,12 +123,13 @@ def simulate_75m_accel(car, target_distance=75.0, dt=0.0005, locked_diff=True):
         motor_rpm = actual_motor_omega * 60.0 / (2.0 * np.pi)
         torque_avail = car.get_motor_torque(motor_rpm) * car.throttle_request
 
-        # Power limit: caps torque x speed at car.power_limit. drivetrain_efficiency (motor +
-        # gearbox losses) is applied after, so this acts as a battery-side power cap
-        # (inverter losses not modeled)
+        # Power limit: car.power_limit is at the battery pack, so the motor gets
+        # power_limit x battery_to_motor_efficiency. Caps torque x speed at that;
+        # drivetrain_efficiency (motor + gearbox losses) is applied after.
+        motor_power_limit = car.power_limit * car.battery_to_motor_efficiency
         power_draw = torque_avail * actual_motor_omega
-        if power_draw > car.power_limit and actual_motor_omega > 1e-6:
-            torque_avail = car.power_limit / actual_motor_omega
+        if power_draw > motor_power_limit and actual_motor_omega > 1e-6:
+            torque_avail = motor_power_limit / actual_motor_omega
 
         # Launch control: one motor, so it reacts to whichever rear wheel slips more
         slip_worst = max(slip_rl, slip_rr)

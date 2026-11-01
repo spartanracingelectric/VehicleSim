@@ -89,7 +89,8 @@ class SR_17:
         self.drivetrain_efficiency = 0.94  # 96% motor efficiency * ~98% single-stage final drive
         self.throttle_request = 1.0      # Driver torque request, as a fraction of the motor's available torque
         self.speed_limit_rpm = 6500       # Motor controller cuts torque above this mechanical speed limit
-        self.power_limit = 80000.0        # Electrical power limit from the inverter/accumulator (W), independent of the torque curve
+        self.power_limit = 80000.0        # Battery pack power limit (W), measured at the accumulator output, independent of the torque curve
+        self.battery_to_motor_efficiency = 0.97  # Pack -> motor efficiency (wiring + inverter): the motor gets power_limit x this
         self.rotor_inertia = 0.018        # Bare motor rotor inertia, unreflected by the final drive ratio (kg*m^2)
         self.half_shaft_stiffness = 3000.0  # Rear half-shaft torsional stiffness (Nm/rad)
         self.half_shaft_damping = 15.0      # Rear half-shaft structural damping (Nm*s/rad)

@@ -38,7 +38,8 @@ def simulate_75m_accel(car, target_distance=75.0, dt=0.0005):
       - Tires: car.tire_forces (Pacejka R20 fit to TTC data, scaled by
         TRACK_GRIP_SCALE). Force holds flat at its peak beyond peak slip.
       - Motor: torque curve x throttle_request x torque split, with all 4 motors
-        sharing car.power_limit.
+        sharing car.power_limit. With car.motor_map (SR_18's AMK efficiency map), each
+        motor's power draw uses its efficiency at its own speed and torque.
       - Torque split: the axle with the larger torque_split_front share gets full
         torque; the other is scaled down to hold the ratio. Left/right always equal.
       - Launch control: each motor gets its own proportional torque cut when its
@@ -168,16 +169,30 @@ def simulate_75m_accel(car, target_distance=75.0, dt=0.0005):
         torque_avail_rl *= launch_control_factor(slip_rl)
         torque_avail_rr *= launch_control_factor(slip_rr)
 
-        # Power limit: caps total torque x speed across all motors at car.power_limit,
-        # scaling every motor down equally. drivetrain_efficiency (motor + gearbox losses)
-        # is applied after, so this acts as a battery-side power cap (inverter losses not
-        # modeled)
-        power_draw_total = motors_per_wheel * (torque_avail_fl * actual_motor_omega_fl
-                                                + torque_avail_fr * actual_motor_omega_fr
-                                                + torque_avail_rl * actual_motor_omega_rl
-                                                + torque_avail_rr * actual_motor_omega_rr)
-        if power_draw_total > car.power_limit and power_draw_total > 1e-6:
-            power_scale = car.power_limit / power_draw_total
+        # Power limit: car.power_limit is at the battery pack, so the motors together get
+        # power_limit x battery_to_motor_efficiency. If that's exceeded, every motor is
+        # scaled down equally until it fits.
+        #   - With a motor efficiency map (car.motor_map): each motor's input power is
+        #     torque x speed / efficiency at its own speed and torque (from the map), and
+        #     drivetrain_efficiency is the final drive only.
+        #   - Without one: input power is taken as torque x speed, and drivetrain_efficiency
+        #     (motor + gearbox losses) is applied after.
+        motor_power_limit = car.power_limit * car.battery_to_motor_efficiency
+        motor_map = getattr(car, 'motor_map', None)
+        if motor_map is not None:
+            power_scale = motor_map.power_scale(
+                (motor_rpm_fl, motor_rpm_fr, motor_rpm_rl, motor_rpm_rr),
+                (torque_avail_fl, torque_avail_fr, torque_avail_rl, torque_avail_rr),
+                motor_power_limit / motors_per_wheel)
+        else:
+            power_draw_total = motors_per_wheel * (torque_avail_fl * actual_motor_omega_fl
+                                                    + torque_avail_fr * actual_motor_omega_fr
+                                                    + torque_avail_rl * actual_motor_omega_rl
+                                                    + torque_avail_rr * actual_motor_omega_rr)
+            power_scale = 1.0
+            if power_draw_total > motor_power_limit and power_draw_total > 1e-6:
+                power_scale = motor_power_limit / power_draw_total
+        if power_scale < 1.0:
             torque_avail_fl *= power_scale
             torque_avail_fr *= power_scale
             torque_avail_rl *= power_scale

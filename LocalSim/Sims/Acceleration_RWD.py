@@ -1,12 +1,16 @@
-# Tire model: "R20_V2" (R20_V2_Tire_Model) or "LC0_V2" (LC0_V2_Tire_Model); both Hoosier
-# 16.0x7.5-10, see Resources/Tire_R20/ and Resources/Tire_LC0/. The baseline and every
-# sweep use this tire.
-TIRE = "R20_V2"
+# Car: "SR_17" or "RIT_F30" (both single-motor RWD; see Resources/Car_Setups/)
+CAR = "SR_17"
 
-# Accel setup: the baseline and every sweep start from these instead of SR_17's own
-# defaults (which the other sims keep: 8 psi, final drive 2.7)
-TIRE_PSI = 8.0
-FINAL_DRIVE_RATIO = 3.5
+# Tire model: "R20_V2" (R20_V2_Tire_Model) or "LC0_V2" (LC0_V2_Tire_Model); both Hoosier
+# 16.0x7.5-10, see Resources/Tire_R20/ and Resources/Tire_LC0/. None = the car's default
+# tire (SR_17: R20_V2, RIT_F30: LC0_V2). The baseline and every sweep use this tire.
+TIRE = None
+
+# Accel setup per car: the baseline and every sweep start from these instead of the car's
+# own defaults (which the other sims keep). SR_17's own are 8 psi and final drive 2.7;
+# RIT_F30 keeps its own 3.63 (8 psi assumed, as SR_17).
+ACCEL_SETUP = {"SR_17": {"tire_pressure_psi": 8.0, "final_drive_ratio": 3.5},
+               "RIT_F30": {"tire_pressure_psi": 8.0, "final_drive_ratio": 3.63}}
 
 # Sweep settings: turn each sweep on/off and set its range as (start, end, step),
 # end included. Each sweep re-runs the full sim once per value.
@@ -27,19 +31,24 @@ sys.path.insert(0, str(RESOURCES_DIR / "Car_Setups"))
 import numpy as np
 import matplotlib.pyplot as plt
 from SR_17 import SR_17
+from RIT_F30 import RIT_F30
 sys.path.insert(0, str(RESOURCES_DIR / "Tire_R20"))
 sys.path.insert(0, str(RESOURCES_DIR / "Tire_LC0"))
 from R20_V2_Tire_Model import R20_V2_Tire_Model
 from LC0_V2_Tire_Model import LC0_V2_Tire_Model
 
+CARS = {"SR_17": SR_17, "RIT_F30": RIT_F30}
+DEFAULT_TIRE = {"SR_17": "R20_V2", "RIT_F30": "LC0_V2"}
+TIRE = TIRE or DEFAULT_TIRE[CAR]
 TIRE_MODELS = {"R20_V2": R20_V2_Tire_Model, "LC0_V2": LC0_V2_Tire_Model}
 
 def make_car(tire=None):
-    """SR_17 set up for Accel (TIRE_PSI, FINAL_DRIVE_RATIO) on the chosen tire (default
-    TIRE). Both models' longitudinal grip drops off with wheelspin instead of holding at
-    the peak. The other sims keep SR_17's own R20_Legacy_Tire_Model."""
-    car = SR_17(tire_pressure_psi=TIRE_PSI)
-    car.final_drive_ratio = FINAL_DRIVE_RATIO
+    """CAR set up for Accel (ACCEL_SETUP) on the chosen tire (default TIRE). Both models'
+    longitudinal grip drops off with wheelspin instead of holding at the peak. The other
+    sims keep SR_17's own R20_Legacy_Tire_Model."""
+    setup = ACCEL_SETUP[CAR]
+    car = CARS[CAR](tire_pressure_psi=setup["tire_pressure_psi"])
+    car.final_drive_ratio = setup["final_drive_ratio"]
     car._tire_model = TIRE_MODELS[tire or TIRE](wheel_radius=car.wheel_radius, psi=car.tire_pressure_psi)
     return car
 
@@ -224,7 +233,7 @@ def simulate_75m_accel(car, target_distance=75.0, dt=0.0005, locked_diff=True):
 fsae_car = make_car()
 elapsed_time, sim_log = simulate_75m_accel(fsae_car)
 
-print(f"--- FSAE 75m Acceleration Simulation (Single-Motor RWD Electric, Locked Diff) ---")
+print(f"--- FSAE 75m Acceleration Simulation ({CAR}, Single-Motor RWD Electric, Locked Diff) ---")
 print(f"Elapsed Time: {elapsed_time:.3f} s")
 print(f"Trap Speed:   {sim_log['v'][-1]:.2f} km/h")
 print(f"Max Accel:    {max(sim_log['a']):.2f} g")
@@ -238,10 +247,10 @@ plt.plot(sim_log['x'], np.array(sim_log['slip_rl']) * 100.0, label="Rear Left")
 plt.plot(sim_log['x'], np.array(sim_log['slip_rr']) * 100.0, label="Rear Right", linestyle='--')
 plt.xlabel("Distance [m]")
 plt.ylabel("Slip Ratio [%]")
-plt.title(f"SR_17 75m Acceleration Slip Ratio vs. Distance ({TIRE} tire)")
+plt.title(f"{CAR} 75m Acceleration Slip Ratio vs. Distance ({TIRE} tire)")
 plt.legend()
 plt.grid(True)
-slip_trace_path = OUTPUT_DIR / "SR_17_accel_slip_trace.png"
+slip_trace_path = OUTPUT_DIR / f"{CAR}_accel_slip_trace.png"
 plt.savefig(slip_trace_path, dpi=150)
 print(f"Saved slip ratio trace graph to {slip_trace_path}")
 
@@ -263,9 +272,9 @@ if RUN_FINAL_DRIVE_RATIO_SWEEP:
     plt.plot(final_drive_ratios, accel_times_vs_ratio, marker='o', markersize=3)
     plt.xlabel("Final Drive Ratio")
     plt.ylabel("75m Elapsed Time (s)")
-    plt.title(f"SR_17 75m Acceleration Time vs. Final Drive Ratio ({TIRE} tire)")
+    plt.title(f"{CAR} 75m Acceleration Time vs. Final Drive Ratio ({TIRE} tire)")
     plt.grid(True)
-    graph_path = OUTPUT_DIR / "SR_17_accel_final_drive_ratio_sweep.png"
+    graph_path = OUTPUT_DIR / f"{CAR}_accel_final_drive_ratio_sweep.png"
     plt.savefig(graph_path, dpi=150)
     print(f"Saved final drive ratio sweep graph to {graph_path}")
 
@@ -286,8 +295,8 @@ if RUN_TARGET_SLIP_RATIO_SWEEP:
     plt.plot(target_slip_ratios, accel_times_vs_slip, marker='o', markersize=3)
     plt.xlabel("Target Slip Ratio")
     plt.ylabel("75m Elapsed Time (s)")
-    plt.title(f"SR_17 75m Acceleration Time vs. Target Slip Ratio ({TIRE} tire)")
+    plt.title(f"{CAR} 75m Acceleration Time vs. Target Slip Ratio ({TIRE} tire)")
     plt.grid(True)
-    slip_graph_path = OUTPUT_DIR / "SR_17_accel_target_slip_ratio_sweep.png"
+    slip_graph_path = OUTPUT_DIR / f"{CAR}_accel_target_slip_ratio_sweep.png"
     plt.savefig(slip_graph_path, dpi=150)
     print(f"Saved target slip ratio sweep graph to {slip_graph_path}")

@@ -15,20 +15,20 @@ def test_front_downforce_at_skidpad_speed():
 def test_drag_at_skidpad_speed():
     assert abs(aero1.getDrag_N(11.588) - 145.0) < 0.1
 
-WHEELBASE_M = 1.53924
-TRACK_M = 1.2065
+WHEELBASE_M = 1.530
+TRACK_M = 1.219
 
 
-def test_full_ackermann_left_turn():
+def test_ackermann_left_turn():
     d_FL, d_FR = steering1.getWheelAngles_rad(0.2)
-    assert abs(d_FL - 0.2167) < 1e-4
-    assert abs(d_FR - 0.1856) < 1e-4
+    assert abs(d_FL - 0.2089) < 1e-4
+    assert abs(d_FR - 0.1924) < 1e-4
 
 
-def test_full_ackermann_right_turn():
+def test_ackermann_right_turn():
     d_FL, d_FR = steering1.getWheelAngles_rad(-0.2)
-    assert abs(d_FL - (-0.1856)) < 1e-4
-    assert abs(d_FR - (-0.2167)) < 1e-4
+    assert abs(d_FL - (-0.1924)) < 1e-4
+    assert abs(d_FR - (-0.2089)) < 1e-4
 
 
 def test_straight_ahead():

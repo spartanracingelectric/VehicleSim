@@ -23,7 +23,7 @@ SR18 = VehicleConfig(
     driver=driverConfigs.driver1,
     # 4 AMK hub motors, each with its own inverter: front left, front right, rear left, rear right
     # copies, since each one keeps its own currents, angle and controller memory
-    inverters=[deepcopy(inverterConfigs.inverter1) for _ in range(4)],
+    inverters=[deepcopy(inverterConfigs.vesc_srinverter) for _ in range(4)],
     motors=[deepcopy(motorConfigs.amk_dd5) for _ in range(4)],
     num_motors=4,
     gear_ratio=11.81,    # motor to wheel, per hub motor

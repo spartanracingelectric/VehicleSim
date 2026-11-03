@@ -76,7 +76,7 @@ def plotPwm(time_s, carrier, duty_cycles, switched_voltages_V, average_voltages_
     plt.close(fig)
 
 # motor + inverter: current tracking, torque, voltage vs inverter limit, power and dc current
-def plotDrive(time_s, torque_request_Nm, torque_Nm, iq_desired_A, iq_A, id_A,
+def plotDrive(time_s, torque_command_Nm, torque_Nm, iq_desired_A, iq_A, id_A,
               vd_V, vq_V, voltage_magnitude_V, max_voltage_V,
               mech_power_W, motor_power_W, dc_power_W, dc_current_A, title, save_path=None):
     time_ms = time_s * 1000
@@ -86,12 +86,12 @@ def plotDrive(time_s, torque_request_Nm, torque_Nm, iq_desired_A, iq_A, id_A,
     ax = axes[0]
     ax.plot(time_ms, iq_desired_A, color="black", ls="--", lw=1, label="iq desired")
     ax.plot(time_ms, iq_A, color="C0", label="iq")
-    ax.plot(time_ms, id_A, color="C1", label="id (desired 0)")
+    ax.plot(time_ms, id_A, color="C1", label="id (0 unless field weakening)")
     ax.set_ylabel("Current (A)")
     ax.set_title("PI controller: rotor-frame currents")
 
     ax = axes[1]
-    ax.plot(time_ms, torque_request_Nm, color="black", ls="--", lw=1, label="request")
+    ax.plot(time_ms, torque_command_Nm, color="black", ls="--", lw=1, label="command (what the current target makes)")
     ax.plot(time_ms, torque_Nm, color="C2", label="motor torque")
     ax.set_ylabel("Torque (Nm)")
     ax.set_title("Torque")
@@ -129,15 +129,15 @@ def plotDrive(time_s, torque_request_Nm, torque_Nm, iq_desired_A, iq_A, id_A,
 
 # acceleration run vs time: pedal and torque, car speed and motor rpm, pack power vs the bms overpower flag,
 # pack voltage and current
-def plotAcceleration(time_s, apps_percent, torque_request_Nm, torque_feedback_Nm, speed_kph, motor_rpm,
+def plotAcceleration(time_s, apps_percent, torque_command_Nm, torque_feedback_Nm, speed_kph, motor_rpm,
                      pack_power_kW, power_threshold_kW, overpower, pack_voltage_V, pack_current_A, title, save_path=None):
     fig, axes = plt.subplots(4, 1, figsize=(11, 14), sharex=True)
     fig.suptitle(f"Straight-line run: {title}")
 
     ax = axes[0]
-    ax.step(time_s, torque_request_Nm, where="post", color="black", ls="--", lw=1, label="vcu request (every 10 ms)")
+    ax.plot(time_s, torque_command_Nm, color="black", ls="--", lw=1, label="command (what the vcu's current makes)")
     ax.plot(time_s, torque_feedback_Nm, color="C2", label="torque feedback (what the motor made)")
-    ax.set_ylim(bottom=0, top=max(torque_request_Nm) * 1.3)
+    ax.set_ylim(bottom=0, top=max(max(torque_command_Nm), max(torque_feedback_Nm)) * 1.3)
     ax.set_ylabel("Torque per motor (Nm)")
     ax.set_title("Pedal and torque")
     pedal_ax = ax.twinx()

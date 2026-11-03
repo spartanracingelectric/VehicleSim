@@ -121,17 +121,17 @@ def checkThermalOff():
 def checkOnDyno():
     inverter = deepcopy(inverter1)
     motor = deepcopy(amk_dd5)
-    control_period_s = inverter.switching_period_s
+    control_period_s = inverter.control_period_s
     steps_per_control_period = round(control_period_s / DT_S)
+    dt_s = control_period_s / steps_per_control_period
     speed_radps = DYNO_TEST["speed_rpm"] * 2 * np.pi / 60
-    num_steps = round(DYNO_TEST["duration_s"] / DT_S)
+    num_steps = round(DYNO_TEST["duration_s"] / dt_s)
 
     copper_loss_W = np.zeros(num_steps)
     for step in range(num_steps):
         if step % steps_per_control_period == 0:
-            inverter.updateCurrentControl(None, motor, DYNO_TEST["bus_voltage_V"], control_period_s,
-                                          current_request_A=DYNO_TEST["current_A"])
-        motor.update_from_phase_voltages(inverter.getPhaseVoltages_V(), DT_S, wm=speed_radps)
+            inverter.updateCurrentControl(DYNO_TEST["current_A"], motor, DYNO_TEST["bus_voltage_V"], control_period_s)
+        motor.update_from_phase_voltages(inverter.getPhaseVoltages_V(), dt_s, wm=speed_radps)
         inverter.measureCurrents(motor.id, motor.iq)
         copper_loss_W[step] = motor.P_copper
 
@@ -142,7 +142,7 @@ def checkOnDyno():
         f"copper loss settled at {settled_loss_W:.0f} W, expected {expected_loss_W:.0f} W"
 
     rise_K = motor.getWindingTemp_C() - motor.coolantTemp_C
-    expected_rise_K = np.sum(copper_loss_W) * DT_S / motor.heatCapacity_JperK
+    expected_rise_K = np.sum(copper_loss_W) * dt_s / motor.heatCapacity_JperK
     assert abs(rise_K - expected_rise_K) < 0.01 * expected_rise_K, \
         f"rose {rise_K:.4f} K, the copper energy says {expected_rise_K:.4f} K"
     print(f"dyno, {CONTINUOUS_CURRENT_ARMS} A rms at {DYNO_TEST['speed_rpm']:.0f} rpm for {DYNO_TEST['duration_s']} s: "

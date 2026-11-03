@@ -14,14 +14,13 @@ def main():
     testPowerConversion()
     testClarkeRoundTrip()
     testParkRoundTrip()
-    for modulation in ("spwm", "svm"):
-        testAverageVoltageMatchesCommand(modulation)
-        testVoltageSaturation(modulation)
+    testAverageVoltageMatchesCommand()
+    testVoltageSaturation()
     print("All inverter checks passed")
 
 # Level 0: dc power and current for motoring and regen
 def testPowerConversion():
-    inverter = InverterConfig(con_current_A=300.0, max_dc_voltage_V=900.0, efficiency=0.97)
+    inverter = InverterConfig(efficiency=0.97)
 
     inverter.updatePower(20000.0, BUS_VOLTAGE_V)
     assert np.isclose(inverter.getDcPower_W(), 20000.0 / 0.97)
@@ -51,8 +50,8 @@ def testParkRoundTrip():
     print("park round trip ok")
 
 # commands under the limit should come back out of the phase voltages unchanged
-def testAverageVoltageMatchesCommand(modulation):
-    inverter = InverterConfig(con_current_A=300.0, max_dc_voltage_V=900.0, modulation=modulation)
+def testAverageVoltageMatchesCommand():
+    inverter = InverterConfig()
     max_voltage_V = inverter.getMaxVoltage_V(BUS_VOLTAGE_V)
     v_d_syn_V, v_q_syn_V = -0.3 * max_voltage_V, 0.9 * max_voltage_V
 
@@ -64,11 +63,11 @@ def testAverageVoltageMatchesCommand(modulation):
 
         v_d_V, v_q_V, _ = clarke(*phase_voltages_V)
         assert np.allclose(park(v_d_V, v_q_V, theta_e_rad), (v_d_syn_V, v_q_syn_V))
-    print(f"{modulation}: average voltage = command, max vector {max_voltage_V:.1f} V")
+    print(f"svm: average voltage = command, max vector {max_voltage_V:.1f} V")
 
 # commands over the limit get scaled onto the limit and flag saturation
-def testVoltageSaturation(modulation):
-    inverter = InverterConfig(con_current_A=300.0, max_dc_voltage_V=900.0, modulation=modulation)
+def testVoltageSaturation():
+    inverter = InverterConfig()
     max_voltage_V = inverter.getMaxVoltage_V(BUS_VOLTAGE_V)
 
     for theta_e_rad in ANGLES_RAD:
@@ -79,7 +78,7 @@ def testVoltageSaturation(modulation):
 
         v_d_V, v_q_V, _ = clarke(*phase_voltages_V)
         assert np.isclose(np.hypot(v_d_V, v_q_V), max_voltage_V)
-    print(f"{modulation}: saturation ok")
+    print("svm: saturation ok")
 
 if __name__ == "__main__":
     main()

@@ -1,3 +1,7 @@
+import math
+import numbers
+
+
 class VehicleConfig:
     # num_motors: how many motor + inverter pairs share the battery (each motor has its own inverter)
     # gear_ratio: motor turns per wheel turn (wheel torque = motor torque * gear_ratio)
@@ -18,6 +22,10 @@ class VehicleConfig:
         if len(self.motors) != num_motors or len(self.inverters) != num_motors:
             raise ValueError(f"Need one motor and one inverter per motor: num_motors={num_motors}, "
                              f"got {len(self.motors)} motors and {len(self.inverters)} inverters")
+        if len({id(m) for m in self.motors}) != num_motors or len({id(i) for i in self.inverters}) != num_motors:
+            raise ValueError("Each corner needs independent motor and inverter instances")
+        if len({i.control_period_s for i in self.inverters}) != 1:
+            raise ValueError("All inverters must use the same control period")
 
         # temporary here because we're missing other models
         self.gear_ratio = gear_ratio
@@ -39,9 +47,8 @@ class VehicleConfig:
     # the 80 kW rule isn't enforced here, the flashed VCU has its own power limiting algorithm.
     # the bms just flags overpower so you can see when a request would break the rule
     #
-    # every motor + inverter pair is simulated on its own and the battery sees all their dc currents,
-    # but they all get the same torque request for now
-    # TODO: a request per motor (torque vectoring)
+        # Scalars broadcast to all motors; sequences use FL, FR, RL, RR order.
+        # Current requests are A peak at the motor, not battery current or RMS.
     #
     # dt_s is the motor's electrical timestep inside the period.
     # torque_request_Nm or current_request_A (per motor) skip the car's own vcu, for when something else decides,
@@ -51,15 +58,21 @@ class VehicleConfig:
     def update(self, apps_percent=0.0, dt_s=5e-6, torque_request_Nm=None, current_request_A=None, *, bps_percent=0.0,
                steering_angle_rad=0.0):
         control_period_s = self.getControlPeriod_s()
+        if torque_request_Nm is not None and current_request_A is not None:
+            raise ValueError("Set current_request_A or torque_request_Nm, not both")
         if torque_request_Nm is None and current_request_A is None:
-            torque_request_Nm = self.vcu.update(apps_percent, control_period_s)
+            if self.vcu is None:
+                raise ValueError("External current/torque commands are required without a stand-in VCU")
+            current_request_A = self.vcu.update(apps_percent, control_period_s)
+        currents = self._corner_requests(current_request_A) if current_request_A is not None else None
+        torques = self._corner_requests(torque_request_Nm) if torque_request_Nm is not None else None
         motor_speed_radps = self.getMotorSpeed_radps()
 
         # a bms shutdown from an earlier period keeps the contactors open
         if self.bms.isShutdown():
             self.updateContactorsOpen(motor_speed_radps)
         else:
-            self.updateDriving(torque_request_Nm, motor_speed_radps, dt_s, current_request_A)
+            self.updateDriving(torques, motor_speed_radps, dt_s, currents)
 
         # bms reads the pack once per its own sample period (bms.sample_period_s, 50 ms), not every tick:
         # voltage/temperature faults latch a shutdown, overpower is only flagged
@@ -88,14 +101,17 @@ class VehicleConfig:
         steps_per_control_period = round(control_period_s / dt_s)
         if steps_per_control_period < 1:
             raise ValueError("Motor timestep must be shorter than the inverter switching period")
+        # The motor substeps must fill the 26 kHz VESC control period exactly.
+        dt_s = control_period_s / steps_per_control_period
 
         bus_voltage_V = self.battery.terminal_voltage_V
         pack_current_A = 0.0
 
         for i in range(self.num_motors):
             self.motors[i].set_wm(motor_speed_radps)
-            self.inverters[i].updateCurrentControl(torque_request_Nm, self.motors[i], bus_voltage_V, control_period_s,
-                                           current_request_A)
+            request_A = (current_request_A[i] if current_request_A is not None else
+                         self.motors[i].find_iq_desired(torque_request_Nm[i]))
+            self.inverters[i].updateCurrentControl(request_A, self.motors[i], bus_voltage_V, control_period_s)
 
             # motor runs in small steps while the inverter holds its voltages for the period
         
@@ -160,7 +176,13 @@ class VehicleConfig:
     # one update covers one inverter switching period
     # assuming control period is same for all inverters, so it uses first inverter
     def getControlPeriod_s(self):
-        return self.inverters[0].switching_period_s
+        return self.inverters[0].control_period_s
+
+    def _corner_requests(self, value):
+        requests = [float(value)] * self.num_motors if isinstance(value, numbers.Real) else list(value)
+        if len(requests) != self.num_motors or not all(math.isfinite(v) for v in requests):
+            raise ValueError(f"Expected {self.num_motors} finite per-motor commands in FL, FR, RL, RR order")
+        return requests
 
     # what each motor actually made: its Te, averaged over the update. a list, one per motor
     def getTorqueFeedback_Nm(self):

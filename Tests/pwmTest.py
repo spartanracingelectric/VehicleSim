@@ -20,9 +20,8 @@ STEPS_PER_SWITCHING_PERIOD = 200     # 0.5 us timestep at 10 kHz
 NUM_ELECTRICAL_CYCLES = 3
 
 def main():
-    for modulation in ("spwm", "svm"):
-        result = simulate(modulation)
-        check(result)
+    result = simulate()
+    check(result)
     print("All pwm checks passed")
 
     # zoom in on three switching periods in the last electrical cycle
@@ -40,20 +39,15 @@ def main():
         (zoom_start_s, zoom_start_s + 3 / SWITCHING_FREQUENCY_HZ),
     )
 
-def simulate(modulation):
-    inverter = InverterConfig(
-        con_current_A=300.0,
-        max_dc_voltage_V=900.0,
-        modulation=modulation,
-        switching_frequency_Hz=SWITCHING_FREQUENCY_HZ,
-    )
+def simulate():
+    inverter = InverterConfig(f_zv_Hz=2 * SWITCHING_FREQUENCY_HZ)    # center-aligned: switches at f_zv / 2
     dt_s = inverter.switching_period_s / STEPS_PER_SWITCHING_PERIOD
     num_periods = round(NUM_ELECTRICAL_CYCLES * SWITCHING_FREQUENCY_HZ / ELECTRICAL_FREQUENCY_HZ)
     num_steps = num_periods * STEPS_PER_SWITCHING_PERIOD
     time_s = np.arange(num_steps) * dt_s
 
     result = SimpleNamespace(
-        modulation=modulation,
+        modulation="svm",
         time_s=time_s,
         carrier=np.zeros(num_steps),
         duty_cycles=np.zeros((num_steps, 3)),

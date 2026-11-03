@@ -3,29 +3,68 @@ import numpy as np
 from Functions.clarkePark import inverseClarke, inversePark
 from Functions.PIDcontroller import PIDController
 
-# largest average voltage vector each modulation can make, as a fraction of bus voltage
-MAX_VOLTAGE_RATIO = {
-    "spwm": 0.5,              # sinusoidal pwm: V_bus / 2
-    "svm": 1 / np.sqrt(3),    # space vector modulation: V_bus / sqrt(3) ~ 0.577 V_bus
-}
+# The inverter runs VESC firmware (SR-Custom-Inverter-FW), so this follows its FOC current loop:
+# mcpwm_foc_set_current -> the limit block in mcpwm_foc.c -> control_current -> foc_svm.
+# the defaults are what the firmware compiles in (hwconf/other/hw_SRINVERTER.h, then motor/mcconf_default.h),
+# a config overrides what gets set in VESC Tool. currents are A peak, VESC's are amplitude-invariant too
+
+# largest voltage vector svm can make without overmodulation: V_bus / sqrt(3) ~ 0.577 V_bus
+MAX_VOLTAGE_RATIO = 1 / np.sqrt(3)
+
+# which speed terms the current controller feeds forward (foc_cc_decoupling)
+DECOUPLING_MODES = ("none", "cross", "bemf", "cross_bemf")
 
 class InverterConfig:
-    def __init__(self, con_current_A, max_dc_voltage_V, efficiency=0.97, modulation="svm", switching_frequency_Hz=10000.0,
-                 current_kp_d=0.58, current_kp_q=0.64, current_tn_d_ms=1.2, current_tn_q_ms=1.2,
-                 field_weakening_kp_AperV=0.08, field_weakening_tn_ms=6.0, field_weakening_start=0.95):
+    #   max_abs_current_A:   l_abs_current_max, the firmware faults above this (fault not modeled yet)
+    #   max_dc_voltage_V:    l_max_vin
+    #   current_max_A / current_min_A: l_current_max / l_current_min, motor current (min is braking, negative)
+    #   in_current_max_A / in_current_min_A: l_in_current_max / l_in_current_min, battery current per inverter
+    #   current_kp (V/A), current_ki (V/As): foc_current_kp / foc_current_ki, one pi for both axes
+    #   f_zv_Hz, sample_v0_v7: foc_f_zv / foc_sample_v0_v7. center-aligned pwm switches at f_zv / 2,
+    #                        and sampling in both zero vectors runs the current loop twice per period
+    #   max_duty, vd_max_fraction: l_max_duty / foc_mag_vd_max, margin under the voltage limit
+    #   decoupling: foc_cc_decoupling, see DECOUPLING_MODES
+    #   max_erpm, erpm_start: l_max_erpm / l_erpm_start, driving current fades to 0 from erpm_start of max_erpm
+    #   fw_current_max_A, fw_duty_start, fw_q_current_factor: foc_fw_current_max / foc_fw_duty_start /
+    #                        foc_fw_q_current_factor, field weakening (0 A = off)
+    def __init__(self, max_abs_current_A=180.0, max_dc_voltage_V=590.0, efficiency=0.97,
+                 current_max_A=60.0, current_min_A=-60.0, in_current_max_A=60.0, in_current_min_A=-60.0,
+                 current_kp=0.03, current_ki=50.0, f_zv_Hz=26000.0, sample_v0_v7=True,
+                 max_duty=0.95, vd_max_fraction=0.98, decoupling="none", max_erpm=100000.0, erpm_start=0.8,
+                 fw_current_max_A=0.0, fw_duty_start=0.8, fw_q_current_factor=0.05):
         if not 0 < efficiency <= 1:
             raise ValueError("Efficiency must be between 0 and 1")
-        if modulation not in MAX_VOLTAGE_RATIO:
-            raise ValueError(f"Modulation must be one of {list(MAX_VOLTAGE_RATIO)}")
-        if switching_frequency_Hz <= 0:
-            raise ValueError("Switching frequency must be positive")
+        if f_zv_Hz <= 0:
+            raise ValueError("f_zv must be positive")
+        if not 0 < max_duty <= 1 or not 0 < vd_max_fraction <= 1:
+            raise ValueError("max_duty and vd_max_fraction must be between 0 and 1")
+        if decoupling not in DECOUPLING_MODES:
+            raise ValueError(f"Decoupling must be one of {DECOUPLING_MODES}")
+        if not 0 <= erpm_start < 1:
+            raise ValueError("erpm_start must be between 0 and 1")
+        if current_max_A <= 0 or current_min_A > 0:
+            raise ValueError("current_max_A must be positive and current_min_A negative (braking)")
 
-        self.con_current_A = con_current_A
+        self.max_abs_current_A = max_abs_current_A
         self.max_dc_voltage_V = max_dc_voltage_V
         self.efficiency = efficiency
-        self.modulation = modulation
-        self.switching_frequency_Hz = switching_frequency_Hz
-        self.switching_period_s = 1 / switching_frequency_Hz
+        self.switching_frequency_Hz = f_zv_Hz / 2
+        self.switching_period_s = 1 / self.switching_frequency_Hz
+        self.control_frequency_Hz = f_zv_Hz if sample_v0_v7 else f_zv_Hz / 2
+        self.control_period_s = 1 / self.control_frequency_Hz
+
+        self.current_max_A = current_max_A
+        self.current_min_A = current_min_A
+        self.in_current_max_A = in_current_max_A
+        self.in_current_min_A = in_current_min_A
+        self.max_duty = max_duty
+        self.vd_max_fraction = vd_max_fraction
+        self.decoupling = decoupling
+        self.max_erpm = max_erpm
+        self.erpm_start = erpm_start
+        self.fw_current_max_A = fw_current_max_A
+        self.fw_duty_start = fw_duty_start
+        self.fw_q_current_factor = fw_q_current_factor
 
         # dc bus side, positive = power flowing out of the battery
         self.bus_voltage_V = 0.0
@@ -43,24 +82,20 @@ class InverterConfig:
         self.gate_states = np.zeros(3, dtype=int)
         self.switched_voltages_V = np.zeros(3)
 
-        # current controller, one pi per axis. gains are Kp (V/A) and Tn (ms), Ki = Kp / Tn
-        self.d_current_controller = PIDController(Kp=current_kp_d, Ki=current_kp_d / (current_tn_d_ms / 1000))
-        self.q_current_controller = PIDController(Kp=current_kp_q, Ki=current_kp_q / (current_tn_q_ms / 1000))
-        self.torque_command_Nm = 0.0
+        # current controller, one pi per axis with the same gains
+        self.d_current_controller = PIDController(Kp=current_kp, Ki=current_ki)
+        self.q_current_controller = PIDController(Kp=current_kp, Ki=current_ki)
+        self.torque_command_Nm = 0.0    # what the current target makes, for the record (VESC has no torque setpoint)
         self.id_desired_A = 0.0
         self.iq_desired_A = 0.0
 
-        # field weakening ("voltage controller" on the amk datasheet): a pi on how much voltage is left,
-        # its output is a negative id that cancels some of the magnet's flux at high speed.
-        # starts once the voltage command passes field_weakening_start of what the bus can make.
-        # output_max = 0 so it only ever weakens, output_min gets set from the motor's limit
-        self.field_weakening_start = field_weakening_start
-        self.field_weakening_controller = PIDController(
-            Kp=field_weakening_kp_AperV, Ki=field_weakening_kp_AperV / (field_weakening_tn_ms / 1000), output_max=0.0)
-        self.voltage_command_V = 0.0    # size of last period's d/q voltage command, before limiting
-        self.d_axis_priority = True     # at the voltage limit: d axis first (True) or shrink both evenly (False)
+        # filtered versions of the last period's output, like the firmware keeps:
+        # duty for field weakening (m_duty_abs_filtered, 0.01 per loop),
+        # mod_q for the battery current limit and the driving direction (mod_q_filter, 0.2 per loop)
+        self.duty_filtered = 0.0
+        self.mod_q_filtered = 0.0
 
-        # current sensing: averaged over each switching period (oversampled, like a real inverter's current
+        # current sensing: averaged over each control period (oversampled, like a real inverter's current
         # sensors), so the controller regulates the average current, not one sample of it
         self.measured_id_sum_A = 0.0
         self.measured_iq_sum_A = 0.0
@@ -86,9 +121,10 @@ class InverterConfig:
 
         return self.dc_current_A
 
-    # // Voltage limit: biggest voltage vector the inverter can make from this bus voltage
+    # // Voltage limit: biggest voltage vector the inverter can make from this bus voltage,
+    # less the max_duty margin
     def getMaxVoltage_V(self, bus_voltage_V):
-        return MAX_VOLTAGE_RATIO[self.modulation] * bus_voltage_V
+        return MAX_VOLTAGE_RATIO * self.max_duty * bus_voltage_V
 
     # scales a d/q voltage command back onto the limit circle, keeping its direction
     # voltage_saturated tells the current controller to stop integrating (anti-windup)
@@ -116,13 +152,10 @@ class InverterConfig:
         v_alpha_V, v_beta_V = inversePark(v_d_syn_V, v_q_syn_V, theta_e_rad)
         v_alpha_V, v_beta_V = self.limitVoltage(v_alpha_V, v_beta_V, bus_voltage_V)
 
-        # zero-sequence voltage that sits the phases inside the bus
+        # zero-sequence voltage that sits the phases inside the bus:
+        # centring the min and max phase gives the same average voltages as svm
         v_abc_V = np.array(inverseClarke(v_alpha_V, v_beta_V))
-        if self.modulation == "svm":
-            # centring the min and max phase gives the same average voltages as svm
-            v_0_V = bus_voltage_V / 2 - (v_abc_V.max() + v_abc_V.min()) / 2
-        else:
-            v_0_V = bus_voltage_V / 2
+        v_0_V = bus_voltage_V / 2 - (v_abc_V.max() + v_abc_V.min()) / 2
 
         self.duty_cycles = np.clip((v_abc_V + v_0_V) / bus_voltage_V, 0.0, 1.0)
 
@@ -138,7 +171,7 @@ class InverterConfig:
         self.measured_iq_sum_A += iq_A
         self.measured_samples += 1
 
-    # average current since the last switching period (or the motor's current right now if nothing was measured)
+    # average current since the last control period (or the motor's current right now if nothing was measured)
     def takeMeasuredCurrents_A(self, motor):
         if self.measured_samples == 0:
             return motor.id, motor.iq
@@ -149,64 +182,49 @@ class InverterConfig:
         self.measured_samples = 0
         return id_A, iq_A
 
-    # // Current control: torque request -> d/q voltage command -> updateVoltage
-    # reads the motor's currents, speed and angle, like the real inverter reads its current sensors and resolver
-    # uses the motor's Ld, Lq, lambda_f and poles for the feedforward, like a real inverter's motor setup
-    # call once per switching period
-    # Told either a torque or a current, per motor:
-    #   torque_request_Nm  (like the AMK inverter): capped at the motor's max, turned into the iq that makes it
-    #   current_request_A  (like a VESC's set-current, A peak): that's the iq target, the torque is whatever it makes.
-    #                      torque_request_Nm is ignored then
-    # after that, both run the same current loop
-    def updateCurrentControl(self, torque_request_Nm, motor, bus_voltage_V, control_period_s, current_request_A=None):
-        # field weakening: if last period's voltage command got near what the bus can make, push id negative.
-        # that cancels some of the magnet's flux (less back-emf) so there's voltage left to make torque
-        headroom_V = self.field_weakening_start * self.getMaxVoltage_V(bus_voltage_V) - self.voltage_command_V
-        self.field_weakening_controller.output_min = -motor.fieldWeakeningCurrent_A
-        self.id_desired_A = self.field_weakening_controller.update(headroom_V, control_period_s)
+    # // Current control: current request -> d/q voltage command -> updateVoltage
+    # told a current like a VESC's set-current (A peak): that's the iq target, the torque is whatever it makes.
+    # reads the motor's currents, speed and angle, like the real inverter reads its current sensors and encoder
+    # uses the motor's Ld, Lq and lambda_f for the decoupling, like the firmware's motor config
+    # call once per control period
+    def updateCurrentControl(self, current_request_A, motor, bus_voltage_V, control_period_s):
+        max_voltage_V = self.getMaxVoltage_V(bus_voltage_V)
 
-        if current_request_A is None:
-            # won't ask the motor for more torque than it can make, then torque -> iq, counting the reluctance
-            # torque from that id
-            self.torque_command_Nm = max(-motor.peakTorque_Nm, min(torque_request_Nm, motor.peakTorque_Nm))
-            self.torque_command_Nm *= self.getSpeedFade(motor, self.torque_command_Nm)
-            self.iq_desired_A = motor.find_iq_desired(self.torque_command_Nm, self.id_desired_A)
-        else:
-            self.iq_desired_A = current_request_A * self.getSpeedFade(motor, current_request_A)
+        # field weakening and the current limits, in the firmware's order
+        self.id_desired_A = self.getFieldWeakeningCurrent_A()
+        self.id_desired_A, self.iq_desired_A = self.limitCurrents(motor, self.id_desired_A, current_request_A)
 
-        # keep the total current under the motor's max
-        if motor.maxCurrent_A is not None:
-            iq_max_A = math.sqrt(max(motor.maxCurrent_A ** 2 - self.id_desired_A ** 2, 0.0))
-            self.iq_desired_A = max(-iq_max_A, min(self.iq_desired_A, iq_max_A))
-
-        # told a current: the torque command is what that current makes (for the record)
-        if current_request_A is not None:
-            self.torque_command_Nm = self.iq_desired_A / motor.find_iq_desired(1.0, self.id_desired_A)
+        # the torque that current makes, for the record
+        self.torque_command_Nm = self.iq_desired_A / motor.find_iq_desired(1.0, self.id_desired_A)
 
         id_A, iq_A = self.takeMeasuredCurrents_A(motor)
         error_d_A = self.id_desired_A - id_A
         error_q_A = self.iq_desired_A - iq_A
 
-        # feedforward cancels the speed terms in the motor's voltage equations
-        # (pdf has + on the d-axis term, but v_d has -we*Lq*iq so it needs - to cancel)
+        # feedforward cancels the speed terms in the motor's voltage equations (whichever decoupling says)
+        # v_d has -we*Lq*iq so it needs - to cancel
         we = motor.find_we(motor.wm)
-        feedforward_d_V = -we * motor.Lq * iq_A
-        feedforward_q_V = we * (motor.Ld * id_A + motor.lambda_f)
+        feedforward_d_V = 0.0
+        feedforward_q_V = 0.0
+        if self.decoupling in ("cross", "cross_bemf"):
+            feedforward_d_V -= we * motor.Lq * iq_A
+            feedforward_q_V += we * motor.Ld * id_A
+        if self.decoupling in ("bemf", "cross_bemf"):
+            feedforward_q_V += we * motor.lambda_f
 
         vd_command_V = self.d_current_controller.getOutput(error_d_A, control_period_s, feedforward_d_V)
         vq_command_V = self.q_current_controller.getOutput(error_q_A, control_period_s, feedforward_q_V)
-        self.voltage_command_V = math.hypot(vd_command_V, vq_command_V)    # field weakening looks at this next period
 
-        # if the bus can't make that much, the d axis gets its voltage first (it's what field weakening works
-        # through) and the q axis gets whatever's left, instead of shrinking both and losing control of id
-        max_voltage_V = self.getMaxVoltage_V(bus_voltage_V)
-        saturated = self.voltage_command_V > max_voltage_V
-        if saturated and self.d_axis_priority:
-            vd_command_V = max(-max_voltage_V, min(vd_command_V, max_voltage_V))
-            vq_command_V = math.copysign(math.sqrt(max_voltage_V ** 2 - vd_command_V ** 2), vq_command_V)
+        # the d axis gets its voltage first (it's what field weakening works through, capped at vd_max_fraction
+        # of the limit) and the q axis gets whatever's left, instead of shrinking both and losing control of id
+        vd_max_V = self.vd_max_fraction * max_voltage_V
+        vq_max_V = math.sqrt(max_voltage_V ** 2 - min(abs(vd_command_V), vd_max_V) ** 2)
+        saturated = abs(vd_command_V) > vd_max_V or abs(vq_command_V) > vq_max_V
+        vd_command_V = max(-vd_max_V, min(vd_command_V, vd_max_V))
+        vq_command_V = max(-vq_max_V, min(vq_command_V, vq_max_V))
 
-        # the voltage is held for a whole period while the rotor keeps turning,
-        # so aim it at where the rotor will be halfway through the period
+        # the voltage is held for a whole period while the rotor keeps turning, so aim it at where the rotor
+        # will be halfway through (the firmware moves its observer angle ahead by speed * dt * 0.5)
         theta_e_rad = motor.find_theta_e(motor.theta_m)
         theta_command_rad = theta_e_rad + we * control_period_s / 2
 
@@ -218,15 +236,57 @@ class InverterConfig:
         self.d_current_controller.updateState(error_d_A, control_period_s, integrate=not self.voltage_saturated)
         self.q_current_controller.updateState(error_q_A, control_period_s, integrate=not self.voltage_saturated)
 
+        # what the output actually was, filtered, for next period.
+        # duty: 1 = the biggest vector the bus can make (duty_now), mod_q: vq / (2/3 V_bus)
+        duty = math.hypot(vd_command_V, vq_command_V) / (MAX_VOLTAGE_RATIO * bus_voltage_V)
+        mod_q = vq_command_V * 1.5 / bus_voltage_V
+        self.duty_filtered += 0.01 * (duty - self.duty_filtered)
+        self.mod_q_filtered += 0.2 * (mod_q - self.mod_q_filtered)
+
         return self.phase_voltages_V
 
-    # speed limit: 1 normally, fading to 0 over the last 2% before the motor's max speed while driving
-    # (request pushing the way the motor spins). braking isn't faded
-    def getSpeedFade(self, motor, request):
-        if motor.maxSpeed_rpm is None or request * motor.wm <= 0:
-            return 1.0
-        speed_rpm = abs(motor.wm) * 60 / (2 * math.pi)
-        fade = (motor.maxSpeed_rpm - speed_rpm) / (0.02 * motor.maxSpeed_rpm)
+    # field weakening (foc_run_fw): 0 below fw_duty_start of max_duty, then a straight line on the filtered duty
+    # up to fw_current_max_A at max_duty. negative id
+    def getFieldWeakeningCurrent_A(self):
+        duty_start = self.fw_duty_start * self.max_duty
+        if self.fw_current_max_A <= 0 or self.duty_filtered <= duty_start:
+            return 0.0
+        fraction = (self.duty_filtered - duty_start) / (self.max_duty - duty_start)
+        return -self.fw_current_max_A * min(fraction, 1.0)
+
+    # current limits, in the firmware's order (mcpwm_foc.c, after field weakening):
+    # field weakening takes a bit off iq, then the battery current limit, then the motor current limits
+    # (the driving one faded near max speed), then the total current under the biggest limit.
+    # mod_q's sign says which way the inverter is driving: driving current is iq with the same sign
+    def limitCurrents(self, motor, id_A, iq_A):
+        mod_q = self.mod_q_filtered
+        iq_A -= math.copysign(1.0, mod_q) * -id_A * self.fw_q_current_factor
+
+        # battery current ~ mod_q * iq, so the battery limit is a limit on iq
+        if mod_q > 0.001:
+            iq_A = max(self.in_current_min_A / mod_q, min(iq_A, self.in_current_max_A / mod_q))
+        elif mod_q < -0.001:
+            iq_A = max(self.in_current_max_A / mod_q, min(iq_A, self.in_current_min_A / mod_q))
+
+        # the speed limit fades only the driving limit, braking isn't faded
+        driving_max_A = self.current_max_A * self.getSpeedFade(motor)
+        if mod_q > 0:
+            iq_A = max(self.current_min_A, min(iq_A, driving_max_A))
+        else:
+            iq_A = max(-driving_max_A, min(iq_A, -self.current_min_A))
+
+        # keep the total current under the biggest limit, id first
+        current_max_abs_A = max(self.current_max_A, -self.current_min_A)
+        id_A = max(-current_max_abs_A, min(id_A, current_max_abs_A))
+        iq_max_A = math.sqrt(max(current_max_abs_A ** 2 - id_A ** 2, 0.0))
+        iq_A = max(-iq_max_A, min(iq_A, iq_max_A))
+        return id_A, iq_A
+
+    # speed limit (l_max_erpm, l_erpm_start): 1 normally, a straight line down to 0 from erpm_start of max_erpm
+    # erpm = electrical rpm = mechanical rpm * pole pairs
+    def getSpeedFade(self, motor):
+        erpm = abs(motor.wm) * 60 / (2 * math.pi) * motor.Np / 2
+        fade = (self.max_erpm - erpm) / ((1 - self.erpm_start) * self.max_erpm)
         return max(0.0, min(fade, 1.0))
 
     # contactors open, so there's no dc bus: the inverter can't drive anything.
@@ -234,8 +294,8 @@ class InverterConfig:
     def turnOff(self):
         self.d_current_controller.reset()
         self.q_current_controller.reset()
-        self.field_weakening_controller.reset()
-        self.voltage_command_V = 0.0
+        self.duty_filtered = 0.0
+        self.mod_q_filtered = 0.0
         self.torque_command_Nm = 0.0
         self.id_desired_A = 0.0
         self.iq_desired_A = 0.0
@@ -270,9 +330,7 @@ class InverterConfig:
 
         return self.switched_voltages_V
 
-#TODO: 2. con_current pid ramp up current :D
-    # def has_overcurrent_fault(self):
-    #     return abs(self.current_A) > self.con_current_A
+    #TODO: the max_abs_current_A fault (mc_interface: FAULT_CODE_ABS_OVER_CURRENT)
 
     def getDcCurrent_A(self):
         return self.dc_current_A
@@ -306,4 +364,3 @@ class InverterConfig:
 
     def getSwitchedVoltages_V(self):
         return self.switched_voltages_V
-

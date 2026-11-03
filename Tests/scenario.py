@@ -56,7 +56,8 @@ def runScenario(scenario):
     result.end_time_s = result.time_s[-1] + control_period_s
     result.num_motors = vehicle.num_motors
     result.peak_torque_Nm = vehicle.motors[0].peakTorque_Nm    # all 4 are the same motor
-    result.max_torque_request_Nm = vehicle.vcu.max_torque_request_Nm
+    result.current_limit_A = max(max(i.current_max_A, -i.current_min_A) for i in vehicle.inverters)
+    result.max_current_request_A = vehicle.vcu.max_current_request_A
     result.vcu_loop_period_s = vehicle.vcu.loop_period_s
     result.bms_sample_period_s = vehicle.bms.sample_period_s
     result.energy_used_kWh = vehicle.battery.discharged_energy_kWh - vehicle.battery.charged_energy_kWh
@@ -90,7 +91,8 @@ def readCar(vehicle, tick, time_s, apps_percent, bps_percent=0.0):
         "rear_brake_pressure_Pa": vehicle.brake.getRearPressure_Pa(),
         "front_slip_ratio": vehicle.chassis.getFrontSlipRatio(),
         "rear_slip_ratio": vehicle.chassis.getRearSlipRatio(),
-        "torque_request_Nm": vehicle.vcu.getTorqueRequest_Nm(),
+        "current_request_A": vehicle.vcu.getCurrentRequest_A(),
+        "motor_current_A": max(float(np.hypot(m.id, m.iq)) for m in vehicle.motors),
         # per motor, averaged over the 4 (they all get the same request for now)
         "torque_command_Nm": float(np.mean([inverter.getTorqueCommand_Nm() for inverter in vehicle.inverters])),
         "torque_feedback_Nm": float(np.mean(vehicle.getTorqueFeedback_Nm())),
@@ -103,7 +105,7 @@ def readCar(vehicle, tick, time_s, apps_percent, bps_percent=0.0):
         "min_cell_voltage_mV": vehicle.bms.min_voltage_mV,
         "soc": vehicle.battery.soc,
         "pack_temp_C": vehicle.battery.temp_C,
-        "motor_temp_C": vehicle.motor.getWindingTemp_C(),
+        "motor_temp_C": max(m.getWindingTemp_C() for m in vehicle.motors),
         "bms_power_kW": vehicle.bms.power_kW,
         "power_threshold_kW": vehicle.bms.max_power_threshold_kW,
         "overpower": vehicle.bms.has_overpower_fault(),
@@ -135,7 +137,7 @@ def plotScenario(result, save_path=None):
     plotAcceleration(
         result.time_s,
         result.apps_percent,
-        result.torque_request_Nm,
+        result.current_request_A,
         result.torque_feedback_Nm,
         result.speed_mps * 3.6,
         result.motor_rpm,

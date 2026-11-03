@@ -131,7 +131,7 @@ class PacejkaR20TireConfig:
     # go back to plateauing past peak slip, but the AWD results (times and both sweep
     # graphs) are more trustworthy, which matters more right now.
     X_PEAK_SEARCH_MAX = 50.0
-    
+
 
     def __init__(self, radius_m=0.2032, psi=12.0, track_grip_scale=0.65):
         self.radius_m = radius_m
@@ -243,5 +243,3 @@ class PacejkaR20TireConfig:
 
     def isAtGripLimit(self):
         return self.normalized_slip >= 1.0 - 1e-9
-
-

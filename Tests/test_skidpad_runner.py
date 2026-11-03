@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from Data import skidpadAnalysis as analysis
 
 
-RUN_TIME_S = 10.0   
+RUN_TIME_S = 10.0
 
 
 def runOne(turn):
@@ -31,4 +31,3 @@ def test_left_and_right_mirror():
 
     for name in ["Y_m", "psi_rad", "r_radps", "delta_rad", "ay_mps2"]:
         assert np.allclose(left[name], -right[name], rtol=0.01, atol=1e-3), name
-

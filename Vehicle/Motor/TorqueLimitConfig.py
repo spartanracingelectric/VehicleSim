@@ -14,7 +14,7 @@ class TorqueLimitConfig:
         motor_radps = wheel_speed_rad_per_second * self.gear_ratio
         motor_rpm = (motor_radps * 60)/(2*np.pi)
         # motor torque times gear ratio equals wheel torque
-        return float(np.interp(motor_rpm, self.rpm_points, self.torque_points_Nm, right = 0.0)) * self.gear_ratio 
+        return float(np.interp(motor_rpm, self.rpm_points, self.torque_points_Nm, right = 0.0)) * self.gear_ratio
 
     def capWheelTorques_Nm(self, wheel_torques_Nm, wheel_speeds_radps_arr):
 
@@ -26,23 +26,16 @@ class TorqueLimitConfig:
             capped_torques.append(max(0.0, min(wheel_torques_Nm[x],max_torque)))
             total_power += (capped_torques[x])*(wheel_speeds_radps_arr[x])
 
-        
-        # checking whether total power (energy delivered per second to wheel) 
+
+        # checking whether total power (energy delivered per second to wheel)
         # is below 80kW, must be under rules and regulations
 
-    
+
 
         if total_power / self.efficiency > self.power_limit_W:
             scale = self.power_limit_W * self.efficiency / total_power
             capped_torques = [t * scale for t in capped_torques]
 
-        
+
 
         return capped_torques
-
-
-
-        
-
-
-

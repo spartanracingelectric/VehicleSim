@@ -1,10 +1,10 @@
 from Functions.PIDcontroller import PIDController
 import math
 
-class SkidPadDriverConfig: 
+class SkidPadDriverConfig:
     def __init__(self, mode, target_speed_mps,  radius_m , turn, lookahead_m, wheelbase_m, speed_kp, speed_ki, max_wheeltorque_Nm, delta_rad = None, center_m = None):
         self.mode = mode
-        self.target_speed_mps = target_speed_mps #target speed mps is a function of time, gives us target speed value at each time 
+        self.target_speed_mps = target_speed_mps #target speed mps is a function of time, gives us target speed value at each time
         self.delta_rad = delta_rad
         self.center_m = center_m
         self.radius_m = radius_m
@@ -16,12 +16,12 @@ class SkidPadDriverConfig:
         self.max_wheeltorque_Nm = max_wheeltorque_Nm
         self.speed_pi = PIDController(Kp = self.speed_kp, Ki = self.speed_ki , output_min  = 0 , output_max = self.max_wheeltorque_Nm)
 
-    
-
-    #update function is handling updating TORQUE COMMAND and STEERING 
 
 
-    #STEERING CAN BE USED IN TWO MODES 
+    #update function is handling updating TORQUE COMMAND and STEERING
+
+
+    #STEERING CAN BE USED IN TWO MODES
 
     #mode 1: self.mode = "fixed"
     #This mode fixes the way one steers, but allows you to change the path/sharpness of turns, but steering angle stays the same for all
@@ -44,19 +44,19 @@ class SkidPadDriverConfig:
 
 
 
-        
+
         elif self.mode=="circle":
             cx,cy = self.center_m
             X,Y = x[0], x[1]
-            theta_car = math.atan2(Y-cy, X-cx) 
+            theta_car = math.atan2(Y-cy, X-cx)
 
             if self.turn == "left":
                 sign = 1
 
-            else: 
+            else:
                 sign = -1
-                
-            
+
+
 
             theta_target = theta_car + sign*2*math.asin(self.lookahead_m/(2*self.radius_m))
 
@@ -68,7 +68,7 @@ class SkidPadDriverConfig:
 
             eta = math.atan2(Ty - Y, Tx - X) - psi
             eta = (eta + math.pi) % (2 * math.pi) - math.pi
-            
+
             delta = math.atan(2 * self.wheelbase_m * math.sin(eta) / self.lookahead_m)
 
 
@@ -76,9 +76,3 @@ class SkidPadDriverConfig:
 
 
         return delta, torque_command
-
-            
-
-        
-
-        

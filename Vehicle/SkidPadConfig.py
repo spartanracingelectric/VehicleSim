@@ -80,28 +80,28 @@ class SkidPadConfig:
             raise ValueError("Speed and radius gotta be positive twin.")
         if turn not in ("left", "right"):
             raise ValueError("Turn direction needs to be 'left' or 'right' I think you got a problem")
-            
+
         X = 0.0
         Y = 0.0
         yaw_angle = 0.0
-        
+
         v = 0.0
-        
+
         if turn == "left":
             yaw = speed_mps / radius
             center = (0.0, radius)
         else:
             yaw = -(speed_mps / radius)
             center = (0.0, -radius)
-        
+
         wheel_positions = [self.getWheelPositions(i) for i in range(4)]
         omega_wheels = []
-        
+
         for x, y in wheel_positions:
             v_wheel_ground = math.hypot(speed_mps - yaw*y, yaw*x)
             omega = v_wheel_ground / self.wheel_radius
             omega_wheels.append(omega)
-            
+
         x0 = [
             X, Y, yaw_angle,
             speed_mps, v, yaw,
@@ -110,7 +110,7 @@ class SkidPadConfig:
             omega_wheels[2],
             omega_wheels[3]
         ]
-        
+
         return x0, center
 
 
@@ -136,7 +136,5 @@ class SkidPadConfig:
             "wheel_r_speed_FR": x0[7],
             "wheel_r_speed_RL": x0[8],
             "wheel_r_speed_RR": x0[9],
-            "center": center  
+            "center": center
         }
-
-    

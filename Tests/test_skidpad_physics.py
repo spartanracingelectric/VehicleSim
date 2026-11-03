@@ -11,7 +11,7 @@ def runCircle(speed, turn="left", dt_s=0.0005, time_s=5.0):
                                  center_m=center, radius_m=radius, turn=turn,
                                  lookahead_m=3.0, wheelbase_m=SR18_skidpad.wheelbase,
                                  speed_kp=30.0, speed_ki=10.0, max_wheeltorque_Nm=248.0)
-    
+
     inputs = {"steer_angles_rad": [0.0, 0.0, 0.0, 0.0], "wheel_torques_Nm": [0.0, 0.0, 0.0, 0.0],
               "external_yaw_moment_Nm": 0.0, "ax_mps2": 0.0, "ay_mps2": 0.0}
     steps_per_update = round(0.01 / dt_s)
@@ -33,10 +33,10 @@ def test_coast_down():
     wheel_speed = 10.0 / SR18_skidpad.wheel_radius
     x = [0.0, 0.0, 0.0, 10.0, 0.0, 0.0, wheel_speed, wheel_speed, wheel_speed, wheel_speed]
     inputs = {
-    "steer_angles_rad": [0.0, 0.0, 0.0, 0.0], 
-    "wheel_torques_Nm": [0.0, 0.0, 0.0, 0.0],  
-    "external_yaw_moment_Nm": 0.0,                
-    "ax_mps2": 0,                               
+    "steer_angles_rad": [0.0, 0.0, 0.0, 0.0],
+    "wheel_torques_Nm": [0.0, 0.0, 0.0, 0.0],
+    "external_yaw_moment_Nm": 0.0,
+    "ax_mps2": 0,
     "ay_mps2": 0.0,
 }
     for step in range(2000):
@@ -49,7 +49,7 @@ def test_coast_down():
 
 def test_loads():
     totalload=sum(getTireLoads_N(SR18_skidpad, 11.0, 0.0, 9.81))
-    
+
     assert abs(totalload - SR18_skidpad.getWeight()-SR18_skidpad.aero.getDownforce_N(11.0)) < 1
 
 def test_lateral_transfer():
@@ -61,7 +61,7 @@ def test_lateral_transfer():
 
 
 def test_force_balance():
-    x,outputs,delta= runCircle(10.0) 
+    x,outputs,delta= runCircle(10.0)
     assert abs(outputs["ay_mps2"]-(x[3]*x[5])) < .01
 
 def test_steering():

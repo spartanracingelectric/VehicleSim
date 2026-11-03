@@ -10,14 +10,14 @@ def makeDriver(target_speed=10.0):
 
 def test_on_circle_steer_is_L_over_R():
     driver = makeDriver()
-    x = [0, 0, 0, 10, 0, 0, 0, 0, 0, 0]          
+    x = [0, 0, 0, 10, 0, 0, 0, 0, 0, 0]
     delta, torque = driver.update(x, 0.0, 0.01)
     assert abs(delta - 0.1671) < 1e-4
 
 
 def test_torque_rises_when_too_slow():
     driver = makeDriver()
-    x = [0, 0, 0, 9, 0, 0, 0, 0, 0, 0]           
+    x = [0, 0, 0, 9, 0, 0, 0, 0, 0, 0]
     torques = [driver.update(x, i * 0.01, 0.01)[1] for i in range(10)]
     for before, after in zip(torques, torques[1:]):
         assert after > before

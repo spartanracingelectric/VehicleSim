@@ -36,14 +36,9 @@ def test_straight_ahead():
     assert abs(d_FL) < 1e-4
     assert abs(d_FR) < 1e-4
 
-    
+
 def test_parallel_steer():
     steering1.ackerman_fraction = 0.0
     d_FL, d_FR = steering1.getWheelAngles_rad(0.2)
     assert abs(d_FL - 0.2) < 1e-4
     assert abs(d_FR - 0.2) < 1e-4
-
-
-
-
-

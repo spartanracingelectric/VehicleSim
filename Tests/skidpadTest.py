@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1])) 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from Vehicle.MainConfigs.SR18_skidpad import SR18_skidpad
 from Vehicle.VCU.Configs.reartv1 import reartv1
@@ -29,8 +29,8 @@ RUNS = {
 def makeDriver(run, turn):
     if turn == "left":
         sign = 1
-    
-    else: 
+
+    else:
         sign = -1
 
     center = (0.0, sign * RADIUS_M)

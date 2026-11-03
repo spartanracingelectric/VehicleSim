@@ -21,19 +21,8 @@ class SteeringConfig:
         outside_blended = abs(delta_rad) + self.ackerman_fraction * (outside - abs(delta_rad))
 
         # left turn
-        if delta_rad>0: 
+        if delta_rad>0:
              return inside_blended, outside_blended
-        
+
         else:
             return -outside_blended, -inside_blended
-        
-
-
-        
-        
-
-
-        
-    
-
-

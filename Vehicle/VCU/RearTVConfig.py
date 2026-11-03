@@ -25,15 +25,15 @@ class RearTVConfig:
         self.inside_cut_Nm = 0.0
         self.is_saturated = False
 
-        
+
     def update(self, x, delta_rad, base_wheel_torque_Nm, dt_s):
 
         if delta_rad == 0:
             return [base_wheel_torque_Nm] * 4, 0.0
-         
 
 
-        
+
+
         current_speed = x[3] #from state vector
         if callable(self.understeer_gradient):
             understeer_gradient = self.understeer_gradient(current_speed)
@@ -41,11 +41,11 @@ class RearTVConfig:
             understeer_gradient = self.understeer_gradient
         r_ref = current_speed*delta_rad/(self.wheelbase_m + understeer_gradient * current_speed**2)
 
-        
+
         #sometimes the desired yaw rate might not be acheivable in one step. To combat this, we must find a more manageable yaw rate to target
         if self.r_ref_filtered_radps is None:
-            self.r_ref_filtered_radps = r_ref 
-        
+            self.r_ref_filtered_radps = r_ref
+
         self.r_ref_filtered_radps += dt_s/ self.ref_filter_time_s * (r_ref - self.r_ref_filtered_radps)
 
 
@@ -63,17 +63,17 @@ class RearTVConfig:
         self.inside_cut_Nm = 0.0
         self.is_saturated = False
 
-        
+
 
         if self.mode == "off":
             return [base_wheel_torque_Nm] * 4, 0.
-        
+
         if self.mode == "oracle":
             self.tv_pi.output_min = None
             self.tv_pi.output_max = None
             moment = turn_sign * self.tv_pi.update(e_turn, dt_s)
             return [base_wheel_torque_Nm] * 4, moment
-        
+
 
         self.tv_pi.output_max = base_wheel_torque_Nm
         torques = [base_wheel_torque_Nm] *4
@@ -88,24 +88,14 @@ class RearTVConfig:
 
         if delta_rad>0:
             inside = 2
-        
+
         else:
             inside = 3
-        
+
 
         torques[inside] -= torque_cut
 
-        
+
         self.inside_cut_Nm = torque_cut
         self.is_saturated = (torque_cut == base_wheel_torque_Nm)
         return torques, 0
-        
-
-        
-
-
-
-        
-        
-
-

@@ -21,7 +21,7 @@ def getCornerSlips(car, forward_speed_mps, sideways_slide_speed_mps, yaw_rate_ra
     slip_angles= []
     slip_ratios= []
     wheel_forward_speeds= []
-    
+
     for i in range(4):
         x_i, y_i = car.getWheelPositions(i)
         d_i = steer_angles_rad[i]
@@ -30,7 +30,7 @@ def getCornerSlips(car, forward_speed_mps, sideways_slide_speed_mps, yaw_rate_ra
 
         vx_w =  vx_corner * math.cos(d_i) + vy_corner * math.sin(d_i)
         vy_w = -vx_corner * math.sin(d_i) + vy_corner * math.cos(d_i)
-        
+
         slip_angle = -math.atan2(vy_w, vx_w)
         slip_ratio = (wheel_speeds_radps[i] * car.wheel_radius - vx_w) / max(abs(vx_w), car.min_slip_speed)
 
@@ -100,4 +100,3 @@ def derivatives(x, inputs, car):
       *wheel_angular_accel]
 
     return dx, outputs
-

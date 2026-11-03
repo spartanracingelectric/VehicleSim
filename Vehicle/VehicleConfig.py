@@ -117,7 +117,7 @@ class VehicleConfig:
             self.inverters[i].updateCurrentControl(request_A, self.motors[i], bus_voltage_V, control_period_s)
 
             # motor runs in small steps while the inverter holds its voltages for the period
-        
+
             torque_sum_Nm = 0.0
             copper_loss_sum_W = 0.0
             dc_current_sum_A = 0.0

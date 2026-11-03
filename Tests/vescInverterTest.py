@@ -125,7 +125,7 @@ def testVehicleControlPeriod():
     assert np.isclose(vehicle.getControlPeriod_s(), 1 / 26000)
     vehicle.advance(0.01, current_request_A=40.0)
     assert vehicle.chassis.getSpeed_mps() > 0
-    print(f"SR18: 10 ms at 40 A -> {vehicle.getTorqueFeedback_Nm():.2f} Nm per motor")
+    print(f"SR18: 10 ms at 40 A -> {vehicle.getTorqueFeedback_Nm()} Nm (FL, FR, RL, RR)")
 
 if __name__ == "__main__":
     main()

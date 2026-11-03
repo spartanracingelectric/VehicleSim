@@ -31,15 +31,17 @@ class VehicleConfig:
         self.gear_ratio = gear_ratio
 
         # per motor, averaged over the motor's small steps in one update. everything else lives in its own part:
-        # vcu.torque_request_Nm, inverter.torque_command_Nm, battery.current_A, battery.terminal_power_W,
+        # vcu.current_request_A, inverter.torque_command_Nm, battery.current_A, battery.terminal_power_W,
         # chassis.speed_mps
         # torque request / command / feedback line up with the log's MCM Torque Command / Commanded Torque / Torque Feedback
         self.torque_feedback_Nm: list[float] = [0.0] * self.num_motors   # what the motor actually made (its Te)
         self.average_copper_loss_W: list[float] = [0.0] * self.num_motors
+        self.average_dc_current_A = [0.0] * self.num_motors
+        self.last_current_request_A = [0.0] * self.num_motors
 
-    # One update = one inverter switching period:
+    # One update = one inverter current-control period:
     #   pedal -> vcu (runs its own 10 ms loop, holds the request in between)
-    #   -> inverter (caps the torque at the motor's max, then current control)
+    #   -> inverter (VESC current limits, field weakening, current control)
     #   -> motor (small electrical steps) -> inverter dc current -> battery -> bms reads the pack
     #   -> chassis: motor torque through the gearbox spins the wheels, the brakes (brake pedal, BPS %) hold them back,
     #      the tires push the car. the wheels' speed sets the motor speed for next time
@@ -47,13 +49,13 @@ class VehicleConfig:
     # the 80 kW rule isn't enforced here, the flashed VCU has its own power limiting algorithm.
     # the bms just flags overpower so you can see when a request would break the rule
     #
-        # Scalars broadcast to all motors; sequences use FL, FR, RL, RR order.
-        # Current requests are A peak at the motor, not battery current or RMS.
+    # Scalars broadcast to all motors; sequences use FL, FR, RL, RR order.
+    # Current requests are A peak at the motor, not battery current or RMS.
     #
     # dt_s is the motor's electrical timestep inside the period.
     # torque_request_Nm or current_request_A (per motor) skip the car's own vcu, for when something else decides,
-    # e.g. the real VCU firmware in a SIL test (vcu.getTorqueRequest_Nm() then isn't updated):
-    #   torque_request_Nm: the inverters are told a torque
+    # e.g. the real VCU firmware in a SIL test (the stand-in VCU isn't updated):
+    #   torque_request_Nm: converted to current at id=0 (convenience API)
     #   current_request_A: the inverters are told a current (A peak, like a VESC's set-current), see InverterConfig
     def update(self, apps_percent=0.0, dt_s=5e-6, torque_request_Nm=None, current_request_A=None, *, bps_percent=0.0,
                steering_angle_rad=0.0):
@@ -86,8 +88,8 @@ class VehicleConfig:
 
         return self.torque_feedback_Nm
 
-    # runs the car for duration_s: as many updates (inverter switching periods, 100 us) as fit, e.g. 100 for
-    # one 10 ms VCU loop. same arguments as update(), held for the whole time
+    # Run as many inverter current-control periods as fit in duration_s;
+    # e.g. 260 for one 10 ms VCU loop at 26 kHz. Commands are held throughout.
     def advance(self, duration_s, apps_percent=0.0, torque_request_Nm=None, current_request_A=None, *, bps_percent=0.0,
                 steering_angle_rad=0.0):
         # round, not int: 0.01 / 0.0001 is 99.99999999999999 in floating point
@@ -111,6 +113,7 @@ class VehicleConfig:
             self.motors[i].set_wm(motor_speed_radps)
             request_A = (current_request_A[i] if current_request_A is not None else
                          self.motors[i].find_iq_desired(torque_request_Nm[i]))
+            self.last_current_request_A[i] = request_A
             self.inverters[i].updateCurrentControl(request_A, self.motors[i], bus_voltage_V, control_period_s)
 
             # motor runs in small steps while the inverter holds its voltages for the period
@@ -131,6 +134,7 @@ class VehicleConfig:
 
             self.torque_feedback_Nm[i] = torque_sum_Nm / steps_per_control_period
             self.average_copper_loss_W[i] = copper_loss_sum_W / steps_per_control_period
+            self.average_dc_current_A[i] = dc_current_sum_A / steps_per_control_period
 
             # the battery sees every inverter's dc current, averaged over the period
             pack_current_A += dc_current_sum_A / steps_per_control_period
@@ -145,6 +149,7 @@ class VehicleConfig:
 
             self.torque_feedback_Nm[i] = 0.0
             self.average_copper_loss_W[i] = 0.0
+            self.average_dc_current_A[i] = 0.0
         self.battery.update(0.0, control_period_s)
 
     # motor torque through the gearbox, per wheel. every wheel is driven, the motors are shared out evenly
@@ -173,7 +178,7 @@ class VehicleConfig:
     def getMotorSpeed_radps(self):
         return self.chassis.getWheelSpeed_radps(self.tire.radius_m) * self.gear_ratio
 
-    # one update covers one inverter switching period
+    # one update covers one inverter current-control period
     # assuming control period is same for all inverters, so it uses first inverter
     def getControlPeriod_s(self):
         return self.inverters[0].control_period_s
@@ -191,3 +196,6 @@ class VehicleConfig:
     # per motor, averaged over the update
     def getAverageCopperLoss_W(self):
         return self.average_copper_loss_W
+
+    def getInverterDcCurrents_A(self):
+        return list(self.average_dc_current_A)

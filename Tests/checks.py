@@ -85,6 +85,21 @@ def coasts(after_s):
         assert np.all(np.diff(result.speed_mps[mask]) <= 1e-12), "the car sped up while coasting"
     return rule
 
+
+def zeroCurrentRequest(after_s):
+    @describe(f"zero motor-current request from {after_s} s")
+    def rule(result):
+        assert np.all(result.current_request_A[window(result, after_s)] == 0), "current still requested after lift"
+    return rule
+
+
+def residualTorqueBelow(limit_Nm, after_s):
+    @describe(f"residual torque below {limit_Nm} Nm from {after_s} s")
+    def rule(result):
+        worst = np.max(np.abs(result.torque_feedback_Nm[window(result, after_s)]))
+        assert worst < limit_Nm, f"residual torque {worst:.4f} Nm exceeds {limit_Nm} Nm"
+    return rule
+
 def staysParked():
     @describe("never moves")
     def rule(result):

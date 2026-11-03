@@ -1,0 +1,23 @@
+{
+  "baseline": "VehSim-1",
+  "assembled_on": "2026-11-03",
+  "source_commits": {
+    "TV": "bec8a9700ac470545dff31937ba17d80fb3d4c5c",
+    "origin/TV": "95984eae9f777d06cfe245d82442d3d6afbaf185",
+    "origin/TireSim": "b8ebee8665067ca13c3f277f97861d58ccd65c3f",
+    "origin/FourMotors": "a6e3267aa313b80e0bb04a7765ed2e3032f15ae8",
+    "origin/motor/thermals": "d65d2262b5440b2f65f624dc7b059075e1f5a3a0",
+    "origin/VESC-INV-01": "f8e7331c675d679a8a2d59ba76f0ec726e427738",
+    "origin/BMSSim-1": "5ba592a552130ca975bc1ca88c68b3788887f05b",
+    "origin/Tejas-01": "c662eba7625c9ea5a1353394e6e541ec833a2713"
+  },
+  "reference_only": [
+    "origin/Tejas-01 LocalSim source/data; not selected by modular SR18"
+  ],
+  "excluded": [
+    "generated plots",
+    "macOS metadata",
+    "origin/update-python-constants tools (not car models)"
+  ],
+  "note": "Latest fetched model branches, reconciled locally. Parameters retain their source assumptions; this is not field validation."
+}

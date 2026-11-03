@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vehiclesim"
-version = "0.1.0"
-description = "SR18 powertrain and straight-line vehicle sim (battery, BMS, inverter, motor, chassis)"
+version = "0.2.0"
+description = "SR18 four-motor powertrain and planar vehicle models for SIL and model studies"
 requires-python = ">=3.10"
 dependencies = [
     "numpy",    # all the car itself needs (Vehicle/, Functions/)

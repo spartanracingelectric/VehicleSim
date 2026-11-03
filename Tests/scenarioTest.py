@@ -5,7 +5,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))    # repo root, so 
 from Tests.scenario import Scenario, runScenario, summarize, plotScenario, stopWhenBmsShutsDown
 from Tests.pedals import hold, ramp, steps, pulses
 from Tests.checks import (ALWAYS, torqueAbout, torqueNeverAbove, accelerates, coasts, staysParked,
-                          reachesDistance, reachesSpeed, noOverpower, overpowerFlagged, noShutdown, shutsDown)
+                          reachesDistance, reachesSpeed, noOverpower, overpowerFlagged, noShutdown, shutsDown,
+                          zeroCurrentRequest, residualTorqueBelow)
 
 # run: pytest Tests/scenarioTest.py -v      (or python Tests/scenarioTest.py)
 #   python Tests/scenarioTest.py --plot                     run all, plot each one
@@ -21,9 +22,14 @@ SCENARIOS = [
              pedal=hold(30), run_time_s=2.0,
              checks=[torqueAbout(0.30 * 21.0, after_s=0.05), accelerates(), noOverpower(), noShutdown()]),
 
+    # VESC field-weakening/current state decays after the request goes to zero.
+    # The recorded replay is below 0.1 Nm by 40 ms; allow 50 ms to settle.
+    # Spinning wheels can still push while releasing stored energy: test body
+    # coasting after 300 ms, independently of electrical command removal.
     Scenario("lift off at 2 s",
              pedal=steps((0.0, 100), (2.0, 0)), run_time_s=3.0,
-             checks=[coasts(after_s=2.02), noShutdown()]),
+             checks=[zeroCurrentRequest(after_s=2.0), residualTorqueBelow(.1, after_s=2.05),
+                     coasts(after_s=2.3), noShutdown()]),
 
     Scenario("accel event 75 m",
              pedal=ramp(to=100, over_s=0.8), run_time_s=10.0, stop_at_distance_m=75,

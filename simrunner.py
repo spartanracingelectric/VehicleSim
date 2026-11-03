@@ -1,7 +1,7 @@
 import numpy as np
+from pathlib import Path
 from Functions.loadConfigs import loadConfigs
 from Vehicle.MainConfigs.SR18 import SR18
-from Data.csvParser import load_speed_trace
 from Data.plot import plot
 
 batteryConfigs = loadConfigs("Vehicle.Battery.Configs")
@@ -11,8 +11,13 @@ NUM_LAPS = 1
 class SimRunner:
     def __init__(self, vehicle, csv_path=TRACE_CSV):
         self.vehicle = vehicle
-        # self.time_s, self.vel_mps = load_speed_trace(csv_path)
-        self.time_s = np.arange(0, 100, 1)
+        if Path(csv_path).is_file():
+            from Data.csvParser import load_speed_trace
+            self.time_s, self.vel_mps = load_speed_trace(csv_path)
+        else:
+            # Keep the runner usable for setup/tests when the optional log is absent.
+            self.time_s = np.arange(0, 100, 1, dtype=float)
+            self.vel_mps = np.zeros(len(self.time_s), dtype=float)
         self.dt_s = float(np.mean(np.diff(self.time_s)))
         self.accel_mps2 = np.zeros(len(self.time_s))
         self.force_N = np.zeros(len(self.time_s))

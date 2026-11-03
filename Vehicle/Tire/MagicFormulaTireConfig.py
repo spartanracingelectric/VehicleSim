@@ -1,4 +1,5 @@
 import numpy
+from Functions.FirstOrderFilter import FirstOrderFilter
 class MagicFormulaTireConfig: #TODO: load sensitivity (mu changing with Fz), camber, aligning moment
 
     # Magic Formula (Pacejka), same curve for both directions, just its own numbers each way
@@ -29,7 +30,8 @@ class MagicFormulaTireConfig: #TODO: load sensitivity (mu changing with Fz), cam
     tireLateralForce = 0.0 # lateral force on the tire
     tireNormalizedSlip = 0.0 # rho, 1 means the tire is at the peak of its curve
 
-    def __init__(self, radius_m, mu, C_long, E_long, long_stiff_per_load, C_lat, E_lat, lat_stiff_per_load):
+    def __init__(self, radius_m, mu, C_long, E_long, long_stiff_per_load, C_lat, E_lat, lat_stiff_per_load,
+                 force_filter_time_constant_s=0.0):
         if radius_m is None or radius_m <= 0:
             raise ValueError(f"radius_m must be > 0, got {radius_m}")
         if mu < 0:
@@ -43,6 +45,8 @@ class MagicFormulaTireConfig: #TODO: load sensitivity (mu changing with Fz), cam
         for name, stiffness in (("long_stiff_per_load", long_stiff_per_load), ("lat_stiff_per_load", lat_stiff_per_load)):
             if stiffness <= 0:
                 raise ValueError(f"{name} must be > 0, got {stiffness}")
+        if force_filter_time_constant_s < 0:
+            raise ValueError("force_filter_time_constant_s must be >= 0")
 
         self.radius_m = radius_m # radius of the tire in meters
         self.mu = mu # friction between tire and road, D = mu * Fz
@@ -52,19 +56,31 @@ class MagicFormulaTireConfig: #TODO: load sensitivity (mu changing with Fz), cam
         self.C_lat = C_lat
         self.E_lat = E_lat
         self.lat_stiff_per_load = lat_stiff_per_load # cornering stiffness / Fz (1/rad)
+        self.force_filter_time_constant_s = float(force_filter_time_constant_s)
+        self._longitudinal_force_filter = FirstOrderFilter(self.force_filter_time_constant_s)
+        self._lateral_force_filter = FirstOrderFilter(self.force_filter_time_constant_s)
 
         # slip where each curve peaks, doesn't change with load (B doesn't) so it's worked out once
         self.peak_slip_ratio = self.getPeakSlip(self.getB(self.long_stiff_per_load, self.C_long), self.C_long, self.E_long)
         self.peak_slip_angle = self.getPeakSlip(self.getB(self.lat_stiff_per_load, self.C_lat), self.C_lat, self.E_lat)
 
-    def calculateForces(self, tireDownForce, slip_ratio, slip_angle):
+    def calculateForces(self, tireDownForce, slip_ratio, slip_angle, dt_s=None):
         # One call for the chassis, same as the dugoff TireConfig.calculateForces
         self.tireSlipRatio = slip_ratio
         self.tireSlipAngle = slip_angle
         self.tireDownForce = tireDownForce
         self.tireLongitudinalForce = self.calculateTireLongitudinalForce(tireDownForce)
         self.tireLateralForce = self.calculateTireLateralForce(tireDownForce)
+        if self.force_filter_time_constant_s:
+            if dt_s is None or dt_s <= 0:
+                raise ValueError("dt_s must be supplied when force filtering is enabled")
+            self.tireLongitudinalForce = self._longitudinal_force_filter.update(self.tireLongitudinalForce, dt_s)
+            self.tireLateralForce = self._lateral_force_filter.update(self.tireLateralForce, dt_s)
         return self.tireLongitudinalForce, self.tireLateralForce
+
+    def resetForceFilter(self):
+        self._longitudinal_force_filter.reset()
+        self._lateral_force_filter.reset()
 
     # k is the wheel slip ratio, uses the stored slip ratio and slip angle (combined slip)
     def calculateTireLongitudinalForce(self, Fz):

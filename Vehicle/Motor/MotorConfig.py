@@ -7,8 +7,11 @@ class MotorConfig: #TODO: Add parameters related to motor
     # the current controller lives in the inverter (InverterConfig.updateCurrentControl), this is just the motor's physics
     # maxCurrent_Arms, maxSpeed_rpm: None = no limit. fieldWeakeningCurrent_Arms: how much negative id
     # the inverter may use to weaken the field at high speed, 0 = no field weakening
+    # thermalResistance_KperW, heatCapacity_JperK: one-node winding temperature (heat goes into the coolant),
+    # None = not modeled, the windings stay at coolantTemp_C
     def __init__(self, Kt, Rs, Np, Lq, Ld, Jm, lambda_f, peakTorque_Nm,
-                 maxCurrent_Arms=None, maxSpeed_rpm=None, fieldWeakeningCurrent_Arms=0.0):
+                 maxCurrent_Arms=None, maxSpeed_rpm=None, fieldWeakeningCurrent_Arms=0.0,
+                 thermalResistance_KperW=None, heatCapacity_JperK=None, coolantTemp_C=25.0):
         self.Kt = Kt #torque constant (Nm/A rms, datasheet)
         self.peakTorque_Nm = peakTorque_Nm #max torque at the motor shaft, before the gearbox
         # model currents are peak (amplitude), datasheet currents are rms
@@ -22,6 +25,9 @@ class MotorConfig: #TODO: Add parameters related to motor
         self.Ld = Ld #direct axis inductance (H)
         self.Jm = Jm #inertia (kgm^2)
         self.lambda_f = lambda_f #rotor flux linkage (Wb)
+        self.thermalResistance_KperW = thermalResistance_KperW #windings -> coolant (K/W), sets where it settles
+        self.heatCapacity_JperK = heatCapacity_JperK #energy to heat the windings 1 K (J/K), sets how fast
+        self.coolantTemp_C = coolantTemp_C #coolant going into the motor (C)
 
         # initialize to 0 at beginning
         self.id = 0
@@ -33,6 +39,7 @@ class MotorConfig: #TODO: Add parameters related to motor
         self.P_copper = 0 #copper loss in the windings (W)
         self.vd = 0 #last d/q voltages the motor saw, rotor frame (V)
         self.vq = 0
+        self.T_winding_C = coolantTemp_C #average winding temperature, starts at the coolant's (C)
 
 
     # the inverter's three phase voltages go straight onto the motor's terminals.
@@ -63,6 +70,7 @@ class MotorConfig: #TODO: Add parameters related to motor
         self.update_wm(self.Te, T_load, Bm, T_friction, delta_t)
         self.Pe = self.find_P_electrical(vd, vq)
         self.P_copper = self.find_P_copper()
+        self.update_T_winding(self.P_copper, delta_t)
 
         return self.id, self.iq, self.Te, self.wm, self.theta_m, self.Pe
 
@@ -123,6 +131,18 @@ class MotorConfig: #TODO: Add parameters related to motor
         self.Te = 0
         self.Pe = 0
         self.P_copper = 0
+        self.update_T_winding(0.0, delta_t) #no current, but the coolant pump (LV side) keeps cooling it
+
+    # one-node winding temperature: Cth * dT/dt = P_loss - (T - T_coolant) / Rth
+    # solved exactly over the step (like the battery's temperature), so any delta_t works,
+    # from the 5 us motor steps to a cool-down between runs
+    # T is the average winding temperature, the hotspot runs hotter. only copper loss heats it (no core loss yet)
+    def update_T_winding(self, P_loss, delta_t):
+        if self.thermalResistance_KperW is None or self.heatCapacity_JperK is None:
+            return
+        T_steady_C = self.coolantTemp_C + P_loss * self.thermalResistance_KperW
+        tau_s = self.thermalResistance_KperW * self.heatCapacity_JperK
+        self.T_winding_C = T_steady_C + (self.T_winding_C - T_steady_C) * math.exp(-delta_t / tau_s)
 
     # heat in the windings from the current going through Rs, uses updated id, updated iq
     # Pe = Te*wm + P_copper (+ a little going in/out of the inductances while current changes)
@@ -135,3 +155,7 @@ class MotorConfig: #TODO: Add parameters related to motor
     # returns motor constant, Kt
     def getMotor_kt(self):
         return self.Kt
+
+    # average winding temperature (C)
+    def getWindingTemp_C(self):
+        return self.T_winding_C

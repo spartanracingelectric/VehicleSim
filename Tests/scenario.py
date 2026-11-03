@@ -103,6 +103,7 @@ def readCar(vehicle, tick, time_s, apps_percent, bps_percent=0.0):
         "min_cell_voltage_mV": vehicle.bms.min_voltage_mV,
         "soc": vehicle.battery.soc,
         "pack_temp_C": vehicle.battery.temp_C,
+        "motor_temp_C": vehicle.motor.getWindingTemp_C(),
         "bms_power_kW": vehicle.bms.power_kW,
         "power_threshold_kW": vehicle.bms.max_power_threshold_kW,
         "overpower": vehicle.bms.has_overpower_fault(),
@@ -152,7 +153,8 @@ def summarize(result):
     text = (f"{result.scenario_name}: {result.end_time_s:.2f} s, {result.speed_mps[-1] * 3.6:.0f} km/h, "
             f"{result.distance_m[-1]:.1f} m, peak {np.max(result.pack_power_W) / 1000:.1f} kW, "
             f"used {result.energy_used_kWh:.3f} kWh, SOC {result.soc[0]:.1%} -> {result.soc[-1]:.1%}, "
-            f"pack {result.pack_temp_C[-1]:.1f} C, {result.tire_model} tires")
+            f"pack {result.pack_temp_C[-1]:.1f} C, motor {result.motor_temp_C[-1]:.1f} C, "
+            f"{result.tire_model} tires")
     if result.overpower.any():
         text += f", overpower from {result.time_s[np.argmax(result.overpower)]:.2f} s"
     if result.shutdown.any():

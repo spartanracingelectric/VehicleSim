@@ -192,7 +192,7 @@ Each part follows its model PDF (inverter, motor, battery). "Level" is how detai
 |---|---|---|
 | **VCU (stand-in)** | 10 ms loop, `request = APPS / 100 × 21 Nm` | no power limiting, traction control, plausibility or regen: those come from the real firmware (SIL) |
 | **Inverter** | Level 0 power (flat 97 %), Level 1 average voltage (SVM, `V_bus / √3`); Level 2 PWM switching only in `pwmTest` | AMK's controller gains (Kp 0.58/0.64 V/A, Tn 1.2 ms), feedforward, averaged current sensing, field weakening PI (Kp 0.08 A/V, Tn 6 ms) down to −35 A rms, d axis first at the voltage limit, torque or current setpoint |
-| **Motor** | Level 2 average-value d/q model, forward Euler at 5 µs | `Te = 1.5·(poles/2)·[λf·iq + (Ld−Lq)·id·iq]`, copper loss; speed set by the car |
+| **Motor** | Level 2 average-value d/q model, forward Euler at 5 µs | `Te = 1.5·(poles/2)·[λf·iq + (Ld−Lq)·id·iq]`, copper loss; speed set by the car; one-node winding temperature |
 | **Battery** | Level 2 Thevenin: OCV(SOC) − I·R | 140s3p, 5 Ah / 6.7 mΩ cells, coulomb counting, I²R heat, no cooling |
 | **BMS** | samples every 50 ms | latched shutdown on cell over/undervoltage (4200 / 2800 mV) or temperature (60 / 0 °C); **> 80 kW is only flagged** |
 | **Chassis** | straight line: wheel force (capped at μ·weight) − drag − rolling | no wheel slip, load transfer, brake force, gearbox loss or rotating inertia |
@@ -202,7 +202,11 @@ Motor equations:
 did/dt = (vd − Rs·id + ωe·Lq·iq) / Ld
 diq/dt = (vq − Rs·iq − ωe·(Ld·id + λf)) / Lq
 Pe     = 1.5 · (vd·id + vq·iq)          P_copper = 1.5 · Rs · (id² + iq²)
+Cth · dT/dt = P_copper − (T − T_coolant) / Rth      (average winding temperature, solved exactly each step)
 ```
+The winding temperature (`motor.getWindingTemp_C()`, logged as `motor_temp_C` in scenarios) is one node: no
+hotspot, no core loss, and nothing uses it yet (no derating, Rs and λf don't change with it). A motor config
+without `thermalResistance_KperW` / `heatCapacity_JperK` stays at the coolant temperature.
 
 Power flow, checked to balance in the tests (motor power = shaft + copper, within 1 %):
 `battery chemical → − battery I²R → pack terminals → − inverter 3 % → motors → − copper → shafts`.
@@ -219,6 +223,9 @@ Power flow, checked to balance in the tests (motor power = shaft + copper, withi
 | motor λf | 0.0293 Wb | from ke = 18.8 V/1000 rpm (Kt would give 0.0245, 16 % too low) |
 | motor Lq / Ld | 0.24 / 0.12 mH | **swapped vs the datasheet labels**, only this way fits its curves |
 | field weakening current | 35 A rms | datasheet "magn. current Im" |
+| motor Rth (windings → coolant) | 0.175 K/W | datasheet "S1 dT=100K": 100 K over the coolant at 53.1 A rms (571 W copper) |
+| **motor heat capacity** | 400 J/K (70 s time constant) | **placeholder**, fit from a dyno heat-up or a KTY84 log |
+| motor coolant temperature | 25 °C | inlet, fixed (no cooling loop model) |
 | controller gains | current Kp 0.58/0.64, Tn 1.2 ms; voltage Kp 0.08, Tn 6 ms | datasheet controller settings |
 | VCU loop / BMS sample | 10 ms / 50 ms | team |
 | BMS limits | 4200 / 2800 mV, 60 / 0 °C, 80 kW | `bms1.py` |
@@ -267,6 +274,7 @@ Run with `python Tests/<name>.py` (plots open a window; `MPLBACKEND=Agg` to skip
 |---|---|
 | `motorDatasheetTest.py` | motor + inverter against AMK's torque-speed curves at 500 / 600 V |
 | `motorInverterTest.py` | one motor + inverter on a dyno: torque steps, voltage limit with field weakening, current setpoint steps |
+| `motorThermalTest.py` | winding temperature: datasheet S1 rating (100 K at 53.1 A rms), time constant, cool-down, step size, heating on a dyno |
 | `inverterTest.py` | inverter math: power conversion, transforms, voltage limit (run it after touching the inverter) |
 | `pwmTest.py` | Level 2: real IGBT switching into a test load, against the average model |
 | `powertrainTest.py` | 15 s full throttle with the full plot, and a low-pack shutdown |
@@ -284,6 +292,7 @@ Run with `python Tests/<name>.py` (plots open a window; `MPLBACKEND=Agg` to skip
 | peak pack power | ~151 kW (no power limiting in the sim; the BMS flags > 80 kW from ~1.6 s) |
 | motor vs AMK datasheet | exact up to the knee, within −9 % / +19 % past it with field weakening |
 | full throttle until empty | 11 min 30 s, 24.4 km, 7.07 kWh, SOC 100 % → 3.2 %, pack 25 → 52.7 °C (no cooling), ends in undervoltage |
+| motor winding temperature | accel event 25 → 31.7 °C (placeholder heat capacity) |
 
 These are with the stand-in VCU (full pedal = 21 Nm). Driven by the real firmware, full pedal is 76.3 A per motor
 (≈ 16.8 Nm), so launches are slower.
@@ -317,13 +326,14 @@ testing VCU logic and timing and for comparing options; not yet for absolute lap
 ## Known gaps
 
 **Placeholders (quick, they change every result):** driver mass, drag area, rolling resistance, inverter efficiency
-and switching frequency, EMRAX electrical values (for an SR17 config).
+and switching frequency, EMRAX electrical values (for an SR17 config), motor heat capacity.
 
 **Not modeled yet:**
 - brake force and regen, wheel slip and load transfer, steering / cornering (straight line only)
 - 4 separate motors / inverters
-- battery current limit, cooling, RC voltage recovery; motor / inverter temperatures (the 105 A max is allowed for
-  1.24 s, not enforced)
+- battery current limit, cooling, RC voltage recovery; inverter temperature; anything using the motor temperature
+  (derating, Rs / λf vs temperature, the KTY84 sensor), its hotspot and core loss (the 105 A max is allowed for
+  1.24 s, not enforced: the one-node average only rises ~7 K in that time)
 - inverter conduction and switching losses (flat 3 % now)
 - a driver model and laps; replaying pedals from a log
 

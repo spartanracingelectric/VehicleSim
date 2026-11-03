@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vehiclesim"
-version = "0.2.0"
+version = "0.3.0"
 description = "SR18 four-motor powertrain and planar vehicle models for SIL and model studies"
 requires-python = ">=3.10"
 dependencies = [
@@ -12,11 +12,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# reading MoTeC logs (Data/csvParser.py), plotting (Data/plot.py) and running Tests/
+# reading logs, plotting and running the regression suite
 # install with: pip install -e ".[dev]"
 dev = ["pandas", "matplotlib", "pytest"]
 
-# installs Vehicle, Functions and Data as they are, so imports stay `from Vehicle.MainConfigs.SR18 import SR18`.
-# Tests/ and the scripts at the root stay out of the package
+# Keep the established runtime namespaces; research and test code are not shipped.
 [tool.setuptools.packages.find]
 include = ["Vehicle*", "Functions*", "Data*"]
+exclude = ["tests*", "examples*", "research*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+python_functions = ["test*"]

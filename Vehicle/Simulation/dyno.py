@@ -1,15 +1,11 @@
-import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))    # repo root, so this also runs as a file or with the run button
 import numpy as np
 from copy import deepcopy
 from types import SimpleNamespace
 from Vehicle.Inverter.Configs.vesc_srinverter import vesc_srinverter
 from Vehicle.Motor.Configs.amk_dd5 import amk_dd5
 from Vehicle.Battery.Configs.sr17 import sr17
-from Data.plot import plotDrive
 
-# run: python Tests/motorInverterTest.py (or python -m Tests.motorInverterTest from the repo root)
 # motor on a dyno (speed held fixed) driven through the VESC inverter, in the pdf timestep order:
 # current request -> limits -> pi controller -> inverter voltage limit + phase voltages
 # -> rotor-frame vd/vq -> motor currents, torque, power -> inverter dc current -> battery
@@ -36,6 +32,7 @@ SATURATION_TEST = SimpleNamespace(
 )
 
 def main():
+    from Data.plot import plotDrive
     step_result = simulate(STEP_TEST)
     checkCurrentSteps(step_result)
     checkVoltageLimit(simulate(SATURATION_TEST))

@@ -1,14 +1,13 @@
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))    # repo root, so this also runs as a file or with the run button
 import numpy as np
 from Vehicle.MainConfigs.SR18 import SR18
 from Data.plot import plotAcceleration
-from Tests.scenario import Scenario, runScenario
-from Tests.pedals import ramp
-from Tests.checks import ALWAYS, accelerates, overpowerFlagged
+from Vehicle.Simulation.scenario import Scenario, runScenario
+from Vehicle.Simulation.pedals import ramp
+from Vehicle.Simulation.validation import ALWAYS, accelerates, overpowerFlagged
 
-# run: python Tests/powertrainTest.py (or python -m Tests.powertrainTest from the repo root)
+# run: python examples/powertrain.py (or python -m examples.powertrain from the repo root)
 # acceleration run: the driver gets on the throttle (0 -> 100% over THROTTLE_RAMP_TIME_S) and holds it.
 # pedal -> vcu (10 ms loop) -> inverters -> motors -> battery -> bms, and the motor torque moves the car.
 # power isn't limited (the flashed VCU does that), the bms flags when the pack goes over 80 kW
@@ -42,7 +41,7 @@ def main():
     )
 
 # the driver: pedal goes from 0 to 100% over THROTTLE_RAMP_TIME_S, then stays down
-# (the loop itself lives in Tests/scenario.py, shared with Tests/scenarioTest.py)
+# (the loop itself lives in Vehicle/Simulation/scenario.py, shared with examples/scenarios.py)
 def accelerate(vehicle, run_time_s, initial_soc=None):
     return runScenario(Scenario(
         "acceleration",
@@ -57,7 +56,7 @@ def checkAcceleration(result):
     pack_power_kW = result.pack_power_W / 1000
     speed_kph = result.speed_mps * 3.6
 
-    # same rules as the scenario tests (Tests/checks.py): vcu only changes its request on its 10 ms loop,
+    # same rules as the scenario tests (Vehicle/Simulation/validation.py): vcu only changes its request on its 10 ms loop,
     # motor current never over the inverter's limit, the bms flag matches what it measured, the car keeps speeding up
     # until it tops out, and the pack goes over 80 kW at some point (nothing here limits it)
     for rule in ALWAYS + [accelerates(), overpowerFlagged()]:

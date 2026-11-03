@@ -1,14 +1,13 @@
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))    # repo root, so this also runs as a file or with the run button
 import numpy as np
 import matplotlib.pyplot as plt
 from Functions.loadConfigs import loadConfigs
 
-# run: python Tests/tireTest.py (or python -m Tests.tireTest from the repo root)
+# run: python examples/tires.py (or python -m examples.tires from the repo root)
 # every tire in Vehicle/Tire/Configs (dugoff tire1, magic formula tire1_mf, ...) on the same plots:
 # Fx vs slip ratio (straight line) and Fy vs slip angle (cornering), at the TTC fit load
-# (nelson's version plotted TireConfig2's dugoff, tire1 is the new TireConfig dugoff now)
+# (nelson's version plotted historical Dugoff's dugoff, tire1 is the new TireConfig dugoff now)
 
 #TODO:
 #get the right coefficients for c_long/lat/tiremu dependent on load

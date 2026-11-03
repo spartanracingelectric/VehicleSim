@@ -1,4 +1,4 @@
-# Skidpad runs A and B, both directions, each TV mode. Run with: python Tests/skidpadTest.py
+# Skidpad runs A and B, both directions, each TV mode. Run with: python examples/skidpad.py
 import math
 import sys
 from copy import deepcopy
@@ -7,12 +7,11 @@ from types import SimpleNamespace
 
 
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from Vehicle.MainConfigs.SR18_skidpad import SR18_skidpad
 from Vehicle.VCU.Configs.reartv1 import reartv1
 from Vehicle.Driver.SkidPadDriverConfig import SkidPadDriverConfig
-from Tests.skidpad import runSkidpad
+from Vehicle.Simulation.skidpad import runSkidpad
 from Data import skidpadAnalysis as analysis
 
 CAR = SR18_skidpad
@@ -83,7 +82,7 @@ def forAnalysis(r, skip_s=1.0):
 
 def main():
     results = runAll()
-    out = Path(__file__).resolve().parents[1] / "Data" / "Outputs"
+    out = Path(__file__).resolve().parents[1] / "outputs"
     out.mkdir(parents=True, exist_ok=True)
 
     # left-turn runs only (the mirror test showed right is the same, flipped), first second dropped

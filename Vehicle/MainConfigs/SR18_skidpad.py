@@ -1,3 +1,4 @@
+from copy import deepcopy
 from Vehicle.SkidPadConfig import SkidPadConfig
 
 from Vehicle.Tire.Configs.tire_r20 import tire_r20
@@ -6,7 +7,7 @@ from Vehicle.Steering.Configs.steering1 import steering1
 from Vehicle.Motor.Configs.amk_limits import amk_limits
 
 
-SR18_skidpad = SkidPadConfig(
+_PARAMETERS = dict(
     mass=277.6,                         # kg
     wheelbase=1.530,                    # m
     rear_weight_distribution=0.477,     # unitless
@@ -26,3 +27,11 @@ SR18_skidpad = SkidPadConfig(
     steering=steering1,
     limits=amk_limits,
 )
+
+
+def create_skidpad():
+    """Create a fresh planar torque-input car; no electrical model is attached."""
+    return SkidPadConfig(**deepcopy(_PARAMETERS))
+
+
+SR18_skidpad = create_skidpad()

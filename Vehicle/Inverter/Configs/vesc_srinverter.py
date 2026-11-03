@@ -19,7 +19,7 @@ vesc_srinverter = InverterConfig(
     current_ki=67.5,
 
     # default off. without it the integrator has to build up the back-emf itself and the cross terms
-    # (we * L = 0.75 ohm at 6000 rpm) are 4x Kp, so iq rings far past the request (Tests/vescInverterTest.py)
+    # (we * L = 0.75 ohm at 6000 rpm) are 4x Kp, so iq rings far past the request (tests/test_vesc_inverter.py)
     decoupling="cross_bemf",
 
     # default 0 A = no field weakening. the AMK allows 35 A rms "magn. current Im" = 49.5 A peak

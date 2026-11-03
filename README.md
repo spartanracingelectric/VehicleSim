@@ -1,50 +1,64 @@
 ﻿# VehicleSim
 
-`VehSim-1` is the consolidated SR18 model baseline. It includes four independent
-AMK/VESC electrical drives, the shared battery/BMS, tire and brake models,
-motor winding thermals, and the planar skidpad model. Source commits, parameter
-assumptions and remaining integration gaps are documented in
-[the model baseline](docs/model_baseline.md).
+SR18 physical models for controller development. Start with a fresh model:
 
-Install Python 3.10+ and then run from this repository:
+```python
+from Vehicle import create_sr18, create_skidpad
+
+car = create_sr18()
+car.advance(0.01, current_request_A=[10, 20, 30, 40])  # A peak, FL/FR/RL/RR
+print(car.getTorqueFeedback_Nm())                    # motor-shaft Nm
+```
+
+Choose the model by the behavior you need:
+
+| Constructor | Simulates | Current limitation |
+|---|---|---|
+| `create_sr18()` | Four independent AMK/VESC electrical drives, battery/BMS, thermal states, longitudinal chassis and brakes | Chassis averages drive torques; no differential-drive yaw |
+| `create_skidpad()` | Planar motion, four wheel speeds/torques, tire forces, load transfer, aero and steering | Electrical drives and battery are not coupled to it yet |
+
+These are explicit fidelity choices. Full VCU TV SIL still requires their
+coupling and the actual SRE-VCU adapter. Do not use the electrical model alone
+to claim torque-vectoring yaw performance.
+
+## Install and verify
 
 ```powershell
 python -m pip install -e ".[dev]"
 python -m pytest -q
-python -m pytest Tests/scenarioTest.py -q
-python Tests/motorThermalTest.py
-python Tests/vescInverterTest.py
 ```
 
-For an external VCU, supply signed peak motor-current commands in FL/FR/RL/RR order:
+One command discovers unit physics checks, motor/inverter and thermal checks,
+and all six straight-line scenarios. Three undefined zero-slip Dugoff factor
+cases intentionally skip; zero-slip force behavior is tested separately.
 
-```python
-from copy import deepcopy
-from Vehicle.MainConfigs.SR18 import SR18
+## Repository layout
 
-car = deepcopy(SR18)
-car.advance(0.01, current_request_A=[10, 20, 30, 40])
-print(car.getTorqueFeedback_Nm())       # four motor-shaft torques, Nm
-print(car.getInverterDcCurrents_A())    # four actual averaged DC currents, A
+| Location | Purpose |
+|---|---|
+| `Vehicle/` | Supported physical models, explicit car factories and runtime simulation helpers |
+| `Functions/` | Numerical helpers used by those models |
+| `Data/` | Log readers and plotting/analysis utilities |
+| `tests/` | Discovered regression tests; no runtime code depends on this directory |
+| `examples/` | Runnable plotting and simulation demonstrations |
+| `research/tejas/` | Independent Tejas car/tire studies and their input data |
+| `research/legacy/` | Retired implementations and incomplete placeholders |
+| `docs/` | Model assumptions, interface, migration notes and source provenance |
+| `outputs/` | Generated figures/logs, ignored by Git |
+
+The installed package excludes tests, examples, research and historical notes.
+Each factory owns its mutable state and explicitly selects its configurations;
+creating a car does not scan/import every configuration in the repository.
+
+Run demonstrations as modules, for example:
+
+```powershell
+python -m examples.battery --duration-s 1
+python -m examples.scenarios --help
+python -m examples.motor_inverter
+python -m examples.skidpad
 ```
 
-A scalar current broadcasts to every motor. The car sums the four DC currents
-into its battery. Invalid command lengths/nonfinite values are rejected. Passing
-external commands bypasses the simple Python pedal controller; actual VCU control
-logic belongs in SRE-VCU.
-
-The detailed electrical car currently uses the longitudinal chassis; differential
-commands do not yet drive four independent planar wheel states. The separate
-planar model accepts four wheel torques and supports steering, slip, yaw, aero
-and load transfer. Its packaged runner is
-`Vehicle.Simulation.skidpad.runSkidpad`; study examples are in `Tests/skidpadTest.py`.
-The electrical and planar paths still need to be coupled for full VCU TV SIL.
-
-`LocalSim/` contains the latest Tejas-01 car/tire/efficiency-map study sources and
-runtime CSV resources. It is a separate research framework, not the default
-modular car or an installed package. Generated plots and digitizer source images
-remain on the source branch.
-
-See [model_sources.json](docs/model_sources.json) for the exact consolidated
-revisions. These are current source models, with documented placeholders; they
-have not all been validated against the physical car.
+See [model assumptions and interface](docs/model_baseline.md),
+[layout migration](docs/repository_layout.md), and
+[exact model source commits](docs/model_sources.json).

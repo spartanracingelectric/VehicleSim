@@ -12,12 +12,13 @@
     "origin/Tejas-01": "c662eba7625c9ea5a1353394e6e541ec833a2713"
   },
   "reference_only": [
-    "origin/Tejas-01 LocalSim source/data; not selected by modular SR18"
+    "research/tejas: source/data from origin/Tejas-01 LocalSim; excluded from installed runtime"
   ],
   "excluded": [
     "generated plots",
     "macOS metadata",
     "origin/update-python-constants tools (not car models)"
   ],
-  "note": "Latest fetched model branches, reconciled locally. Parameters retain their source assumptions; this is not field validation."
+  "note": "Latest fetched model branches, reconciled locally. Parameters retain their source assumptions; this is not field validation.",
+  "layout_version": "0.3.0"
 }

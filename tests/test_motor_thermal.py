@@ -1,13 +1,12 @@
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))    # repo root, so this also runs as a file or with the run button
 import math
 import numpy as np
 from copy import deepcopy
-from Vehicle.Inverter.Configs.inverter1 import inverter1
+from Vehicle.Inverter.Configs.vesc_srinverter import vesc_srinverter
 from Vehicle.Motor.Configs.amk_dd5 import amk_dd5
 
-# run: python Tests/motorThermalTest.py (or python -m Tests.motorThermalTest from the repo root)
+# run: python tests/test_motor_thermal.py (or python -m tests.test_motor_thermal from the repo root)
 # the motor's one-node winding temperature, Cth * dT/dt = P_copper - (T - T_coolant) / Rth:
 # first the thermal model on its own, fed a fixed copper loss, against the datasheet's S1 rating,
 # then on a dyno through the inverter, where the heat comes from the motor's own currents
@@ -119,7 +118,7 @@ def checkThermalOff():
 # the motor heats itself from its own copper loss, every 5 us step, driven through the inverter.
 # over 0.2 s next to nothing reaches the coolant (time constant 70 s), so the rise is copper energy / heat capacity
 def checkOnDyno():
-    inverter = deepcopy(inverter1)
+    inverter = deepcopy(vesc_srinverter)
     motor = deepcopy(amk_dd5)
     control_period_s = inverter.control_period_s
     steps_per_control_period = round(control_period_s / DT_S)
@@ -158,4 +157,8 @@ def printPeakCurrent():
           f"only +{motor.getWindingTemp_C() - motor.coolantTemp_C:.1f} K on the average winding temperature")
 
 if __name__ == "__main__":
+    main()
+
+
+def test_motor_thermal_rating_and_dynamics():
     main()

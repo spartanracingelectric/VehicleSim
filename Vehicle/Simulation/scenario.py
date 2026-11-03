@@ -10,8 +10,8 @@ from typing import Callable
 @dataclass
 class Scenario:
     name: str
-    pedal: Callable[[float], float]                 # time (s) -> pedal %, see Tests/pedals.py
-    checks: list = field(default_factory=list)      # rules for the result, see Tests/checks.py
+    pedal: Callable[[float], float]                 # time (s) -> pedal %, see Vehicle/Simulation/pedals.py
+    checks: list = field(default_factory=list)      # rules for the result, see Vehicle/Simulation/validation.py
     run_time_s: float = 5.0                         # stops here at the latest
     stop_at_distance_m: float = None                # or as soon as the car has gone this far
     stop_when: Callable = None                      # or as soon as stop_when(vehicle) is True, e.g. stopWhenBmsShutsDown

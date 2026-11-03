@@ -2,7 +2,12 @@ __pycache__/
 *.py[cod]
 *.pyc
 .pytest_cache/
-*.csv
 # pip install -e . output
 *.egg-info/
 build/
+dist/
+.venv/
+outputs/
+Data/Outputs/
+research/tejas/Outputs/
+.DS_Store

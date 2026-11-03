@@ -1,7 +1,9 @@
+> Historical results for the pre-cleanup layout at `36d4a10`. Use the root README for current commands.
+
 # Consolidation validation — November 3, 2026
 
 Tested the consolidated model tree on Windows with Python 3.12.14. Exact input
-model revisions are in [model_sources.json](model_sources.json).
+model revisions are in [model_sources.json](../model_sources.json).
 
 | Check | Result |
 |---|---|
@@ -25,7 +27,7 @@ monotonic body coasting 20 ms after lift despite stored wheel rotational energy.
 
 The model suite's JUnit report and diagnostic replay are generated under
 `build/`, which is not committed. Reproduction commands and interpretation limits
-are in [model_baseline.md](model_baseline.md).
+are in [model_baseline.md](../model_baseline.md).
 
 This validates the assembled source/model APIs. It does not validate the physical
 parameter estimates, establish on-car performance, or connect the real SRE-VCU

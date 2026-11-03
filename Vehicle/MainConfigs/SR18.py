@@ -1,32 +1,29 @@
+"""Supported longitudinal electrical car. Every factory call owns its state."""
 from copy import deepcopy
 from Vehicle.VehicleConfig import VehicleConfig
-from Functions.loadConfigs import loadConfigs
+from Vehicle.Battery.Configs.sr17 import sr17
+from Vehicle.Axel.Configs.axel1 import axel1
+from Vehicle.BMS.Configs.bms1 import bms1
+from Vehicle.Brake.Configs.brake1 import brake1
+from Vehicle.Chassis.Configs.chassis1 import chassis1
+from Vehicle.Driver.Configs.driver1 import driver1
+from Vehicle.Inverter.Configs.vesc_srinverter import vesc_srinverter
+from Vehicle.Motor.Configs.amk_dd5 import amk_dd5
+from Vehicle.Tire.Configs.tire1 import tire1
+from Vehicle.VCU.Configs.vcu1 import vcu1
 
-batteryConfigs = loadConfigs("Vehicle.Battery.Configs")
-axelConfigs = loadConfigs("Vehicle.Axel.Configs")
-bmsConfigs = loadConfigs("Vehicle.BMS.Configs")
-brakeConfigs = loadConfigs("Vehicle.Brake.Configs")
-chassisConfigs = loadConfigs("Vehicle.Chassis.Configs")
-driverConfigs = loadConfigs("Vehicle.Driver.Configs")
-inverterConfigs = loadConfigs("Vehicle.Inverter.Configs")
-motorConfigs = loadConfigs("Vehicle.Motor.Configs")
-tireConfigs = loadConfigs("Vehicle.Tire.Configs")
-vcuConfigs = loadConfigs("Vehicle.VCU.Configs")
 
-SR18 = VehicleConfig(
-    vehicle_mass_kg=204.1,
-    battery=batteryConfigs.sr17,
-    axel=axelConfigs.axel1,
-    bms=bmsConfigs.bms1,
-    brake=brakeConfigs.brake1,
-    chassis=chassisConfigs.chassis1,
-    driver=driverConfigs.driver1,
-    # 4 AMK hub motors, each with its own inverter: front left, front right, rear left, rear right
-    # copies, since each one keeps its own currents, angle and controller memory
-    inverters=[deepcopy(inverterConfigs.vesc_srinverter) for _ in range(4)],
-    motors=[deepcopy(motorConfigs.amk_dd5) for _ in range(4)],
-    num_motors=4,
-    gear_ratio=11.81,    # motor to wheel, per hub motor
-    tire=tireConfigs.tire1,
-    vcu=vcuConfigs.vcu1,
-)
+def create_sr18():
+    """Create a fresh four-drive electrical car with the longitudinal chassis."""
+    return VehicleConfig(
+        vehicle_mass_kg=204.1, gear_ratio=11.81, num_motors=4,
+        battery=deepcopy(sr17), axel=deepcopy(axel1), bms=deepcopy(bms1),
+        brake=deepcopy(brake1), chassis=deepcopy(chassis1), driver=deepcopy(driver1),
+        inverters=[deepcopy(vesc_srinverter) for _ in range(4)],
+        motors=[deepcopy(amk_dd5) for _ in range(4)],
+        tire=deepcopy(tire1), vcu=deepcopy(vcu1),
+    )
+
+
+# Compatibility object for existing consumers; new code should use the factory.
+SR18 = create_sr18()

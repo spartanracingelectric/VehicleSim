@@ -2,7 +2,7 @@
 # vehicle simulation. The TireConfig class encapsulates the properties and behaviors of a tire,
 # including its radius and stiffness characteristics. Based on Dugoff tire model, not Magic Formula
 #
-# NOTE: there is a second dugoff model, Vehicle/Tire/TireConfig2.py on VehSim-1 (nelsonng1).
+# NOTE: there is a second dugoff model, research/legacy/dugoff_original.py (historical reference only).
 # This one is meant to replace it, still needs to be agreed on with nelson before merging.
 # Tire values in Configs/tire1.py come from his TTC data (Configs/tiretesting2.py on VehSim-1).
 # Differences: his slip ratio divides by wheel speed and uses 1/(1 - k), which mixes two slip

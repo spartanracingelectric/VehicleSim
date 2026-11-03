@@ -1,6 +1,5 @@
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))    # repo root, so this also runs as a file or with the run button
 import numpy as np
 from copy import deepcopy
 from types import SimpleNamespace
@@ -9,7 +8,7 @@ from Vehicle.Motor.Configs.amk_dd5 import amk_dd5
 from Vehicle.Battery.Configs.sr17 import sr17
 from Vehicle.MainConfigs.SR18 import SR18
 
-# run: python Tests/vescInverterTest.py (or python -m Tests.vescInverterTest from the repo root)
+# run: python tests/test_vesc_inverter.py (or python -m tests.test_vesc_inverter from the repo root)
 # the VESC firmware's limits and settings on the AMK on a dyno: current and battery current limits,
 # speed fade, field weakening, decoupling, and the car running at the 26 kHz current loop
 

@@ -1,10 +1,9 @@
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))    # repo root, so this also runs as a file or with the run button
 import numpy as np
 from Functions.PIDcontroller import PIDController
 
-# run: python Tests/pidTest.py (or python -m Tests.pidTest from the repo root)
+# run: python tests/test_pid.py (or python -m tests.test_pid from the repo root)
 # the pid on its own, driving a simple first-order plant: dy/dt = (u - y) / TAU_S
 
 TAU_S = 0.5

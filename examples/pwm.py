@@ -1,12 +1,11 @@
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))    # repo root, so this also runs as a file or with the run button
 import numpy as np
 from types import SimpleNamespace
 from Vehicle.Inverter.InverterConfig import InverterConfig
 from Data.plot import plotPwm
 
-# run: python Tests/pwmTest.py (or python -m Tests.pwmTest from the repo root)
+# run: python examples/pwm.py (or python -m examples.pwm from the repo root)
 # Level 2 inverter driving a three-phase star r-l test load (made-up values, not the emrax).
 # the same load is also driven by the Level 1 average voltages so the two can be compared.
 

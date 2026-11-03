@@ -1,11 +1,10 @@
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))    # repo root, so this also runs as a file or with the run button
 import numpy as np
 from Functions.clarkePark import clarke, inverseClarke, park, inversePark
 from Vehicle.Inverter.InverterConfig import InverterConfig
 
-# run: python Tests/inverterTest.py (or python -m Tests.inverterTest from the repo root)
+# run: python tests/test_inverter.py (or python -m tests.test_inverter from the repo root)
 
 BUS_VOLTAGE_V = 500.0
 ANGLES_RAD = np.linspace(0, 2 * np.pi, 37)

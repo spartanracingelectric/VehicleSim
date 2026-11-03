@@ -15,8 +15,8 @@ from Vehicle.Brake.BrakeConfig import BrakeConfig
 from Vehicle.Chassis.ChassisConfig import ChassisConfig
 from Vehicle.Tire.Configs.tire1 import tire1
 from Vehicle.Tire.Configs.tire1_mf import tire1_mf
-from Tests.scenario import Scenario, runScenario
-from Tests.pedals import hold, steps
+from Vehicle.Simulation.scenario import Scenario, runScenario
+from Vehicle.Simulation.pedals import hold, steps
 
 TIRES = [tire1, tire1_mf]
 TIRE_IDS = ["dugoff", "magic_formula"]

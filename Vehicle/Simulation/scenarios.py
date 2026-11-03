@@ -1,21 +1,14 @@
-import sys
 import argparse
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))    # repo root, so this also runs as a file or with the run button
-from Tests.scenario import Scenario, runScenario, summarize, plotScenario, stopWhenBmsShutsDown
-from Tests.pedals import hold, ramp, steps, pulses
-from Tests.checks import (ALWAYS, torqueAbout, torqueNeverAbove, accelerates, coasts, staysParked,
+from Vehicle.Simulation.scenario import Scenario, runScenario, summarize, plotScenario, stopWhenBmsShutsDown
+from Vehicle.Simulation.pedals import hold, ramp, steps, pulses
+from Vehicle.Simulation.validation import (ALWAYS, torqueAbout, torqueNeverAbove, accelerates, coasts, staysParked,
                           reachesDistance, reachesSpeed, noOverpower, overpowerFlagged, noShutdown, shutsDown,
                           zeroCurrentRequest, residualTorqueBelow)
 
-# run: pytest Tests/scenarioTest.py -v      (or python Tests/scenarioTest.py)
-#   python Tests/scenarioTest.py --plot                     run all, plot each one
-#   python Tests/scenarioTest.py "lift off" --plot          run and plot just the ones with "lift off" in the name
-#   python Tests/scenarioTest.py --save plots               save each plot as plots/<name>.png instead
-#   python Tests/scenarioTest.py --slow                     include SLOW_SCENARIOS (minutes each, pytest skips them)
 # one Scenario = one test: the pedal over time, how the car starts, when it stops, and what has to be true.
 # checks.ALWAYS (inverter current limit, vcu timing, bms flag) runs on every scenario on top of its own checks.
-# to add a test, add a row: pedal shapes are in Tests/pedals.py, checks in Tests/checks.py
+# to add a test, add a row: pedal shapes are in Vehicle/Simulation/pedals.py, checks in Vehicle/Simulation/validation.py
 
 SCENARIOS = [
     Scenario("part throttle 30%",
@@ -64,16 +57,6 @@ def runAndCheck(scenario):
     result = runScenario(scenario)
     checkResult(scenario, result)
     return result
-
-# pytest runs every row as its own test
-try:
-    import pytest
-
-    @pytest.mark.parametrize("scenario", SCENARIOS, ids=lambda scenario: scenario.name)
-    def testScenario(scenario):
-        print(summarize(runAndCheck(scenario)))
-except ImportError:
-    pass
 
 # without pytest: run them and print pass/fail, optionally plotting each one
 def main():

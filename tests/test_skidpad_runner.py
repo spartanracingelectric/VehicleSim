@@ -3,8 +3,8 @@ from copy import deepcopy
 
 from Vehicle.MainConfigs.SR18_skidpad import SR18_skidpad
 from Vehicle.VCU.Configs.reartv1 import reartv1
-from Tests.skidpad import runSkidpad
-from Tests.skidpadTest import makeDriver
+from Vehicle.Simulation.skidpad import runSkidpad
+from Vehicle.Driver.SkidPadDriverConfig import SkidPadDriverConfig
 from types import SimpleNamespace
 from Data import skidpadAnalysis as analysis
 
@@ -15,7 +15,11 @@ RUN_TIME_S = 10.0
 def runOne(turn):
     tv = deepcopy(reartv1)
     tv.mode = "inside_cut"
-    return runSkidpad(SR18_skidpad, makeDriver("B", turn), tv, RUN_TIME_S, start_speed_mps=6.0)
+    return runSkidpad(SR18_skidpad, SkidPadDriverConfig(
+        mode="circle", target_speed_mps=lambda t: 6.0 + .5 * (t // 4),
+        radius_m=9.125, turn=turn, lookahead_m=3.0,
+        wheelbase_m=SR18_skidpad.wheelbase, speed_kp=30, speed_ki=10,
+        max_wheeltorque_Nm=248, center_m=(0, 9.125 if turn == "left" else -9.125)), tv, RUN_TIME_S, start_speed_mps=6.0)
 
 
 def test_left_and_right_mirror():

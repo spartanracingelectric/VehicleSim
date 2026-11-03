@@ -1,12 +1,11 @@
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))    # repo root, so this also runs as a file or with the run button
 import numpy as np
 from copy import deepcopy
 from Vehicle.Inverter.Configs.vesc_srinverter import vesc_srinverter
 from Vehicle.Motor.Configs.amk_dd5 import amk_dd5
 
-# run: python Tests/motorDatasheetTest.py (or python -m Tests.motorDatasheetTest from the repo root)
+# run: python tests/test_motor_datasheet.py (or python -m tests.test_motor_datasheet from the repo root)
 # motor + the VESC inverter at fixed speeds on a fixed dc voltage, the current for full torque requested,
 # against the curves on Vehicle/Motor/Configs/amk_motor_datasheet.pdf (those are with AMK's own inverter).
 # the VESC holds a current, not a torque, and starts field weakening early (from 80 % of max duty), so the
@@ -74,4 +73,8 @@ def maxTorque_Nm(bus_voltage_V, speed_rpm, steps_per_period=20):
     return float(np.mean(torques_Nm))
 
 if __name__ == "__main__":
+    main()
+
+
+def test_datasheet_torque_envelope():
     main()

@@ -63,7 +63,7 @@ class TestSteeringAndTorqueVectoring:
         chassis.speed_mps = 15.0
         tire = make_dugoff()
         for _ in range(1000):
-            chassis.update(0.0, 0.0, 0.0, 0.0, 250.0, tire, 1e-4,
+            chassis.update(0.0, 0.0, 0.0, 250.0, tire, 1e-4,
                            steering_angle_rad=math.radians(5.0))
         assert chassis.yaw_rate_radps > 0.0
         assert chassis.y_m > 0.0

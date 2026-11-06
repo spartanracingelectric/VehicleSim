@@ -4,9 +4,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))    # repo root, so 
 import numpy as np
 import matplotlib.pyplot as plt
 from Functions.loadConfigs import loadConfigs
+from Vehicle.Tire.Tire import Tire
 
 # run: python Tests/tireTest.py (or python -m Tests.tireTest from the repo root)
-# every tire in Vehicle/Tire/Configs (dugoff tire1, magic formula tire1_mf, ...) on the same plots:
+# every tire in Vehicle/Tire/Configs, both models (dugoff and pacejka) on the same plots:
 # Fx vs slip ratio (straight line) and Fy vs slip angle (cornering), at the TTC fit load
 # (nelson's version plotted TireConfig2's dugoff, tire1 is the new TireConfig dugoff now)
 
@@ -23,8 +24,9 @@ def main():
     slip_angles = np.linspace(-0.5, 0.5, 401)
 
     fig, (fx_ax, fy_ax) = plt.subplots(1, 2, figsize=(12, 5))
-    for name, tire in sorted(tires.items()):
-        label = f"{name} ({tire.model_name})"
+    models = [(f"{name} ({model})", tire.copy().setModel(model).createModel())
+              for name, tire in sorted(tires.items()) for model in Tire.MODELS]
+    for label, tire in models:
         fx_ax.plot(slip_ratios, [tire.calculateForces(FZ_N, k, 0.0)[0] for k in slip_ratios], label=label)
         fy_ax.plot(np.degrees(slip_angles), [tire.calculateForces(FZ_N, 0.0, a)[1] for a in slip_angles], label=label)
 

@@ -30,8 +30,8 @@ class VehicleConfig:
     #   pedal -> vcu (runs its own 10 ms loop, holds the request in between)
     #   -> inverter (caps the torque at the motor's max, then current control)
     #   -> motor (small electrical steps) -> inverter dc current -> battery -> bms reads the pack
-    #   -> chassis: motor torque through the gearbox spins the wheels, the brakes (brake pedal, BPS %) hold them back,
-    #      the tires push the car. the wheels' speed sets the motor speed for next time
+    #   -> chassis: motor torque through the gearbox spins each of the 4 wheels, the brakes (brake pedal, BPS %) hold them back,
+    #      the 4 tires push the car. the wheels' speed sets the motor speed for next time
     #
     # the 80 kW rule isn't enforced here, the flashed VCU has its own power limiting algorithm.
     # the bms just flags overpower so you can see when a request would break the rule
@@ -62,9 +62,10 @@ class VehicleConfig:
         # voltage/temperature faults latch a shutdown, overpower is only flagged
         self.bms.updateFromPack(self.battery, control_period_s)
 
-        # negative motor torque is regen braking: the friction brakes only make up the rest of the pedal
-        self.brake.update(bps_percent, regen_torque_Nm=max(0.0, -self.getWheelTorque_Nm()))
-        self.chassis.update(self.getWheelTorque_Nm(), self.brake.getFrontWheelTorque_Nm(), self.brake.getRearWheelTorque_Nm(),
+        # negative motor torque is regen braking: the friction brakes only make up the rest of the pedal, wheel by wheel
+        wheel_torques_Nm = self.getWheelTorques_Nm()
+        self.brake.update(bps_percent, regen_torque_Nm=[max(0.0, -torque_Nm) for torque_Nm in wheel_torques_Nm])
+        self.chassis.update(wheel_torques_Nm, self.brake.getWheelTorques_Nm(),
                             self.getDrivelineInertia_kgm2(), self.getMass_kg(), self.tire, control_period_s,
                             steering_angle_rad=steering_angle_rad)
 
@@ -121,6 +122,12 @@ class VehicleConfig:
         self.torque_feedback_Nm = 0.0
         self.average_copper_loss_W = 0.0
         self.battery.update(0.0, control_period_s)
+
+    # torque at each wheel [FL, FR, RL, RR], the chassis and brakes take four numbers.
+    # one motor is simulated so all four are the same for now. TODO: when each motor is simulated on its own (FourMotors
+    # branch) this is motor i's torque * gear_ratio for wheel i, nothing else has to change
+    def getWheelTorques_Nm(self):
+        return [self.getWheelTorque_Nm()] * self.getWheelCount()
 
     # motor torque through the gearbox, per wheel. every wheel is driven, the motors are shared out evenly
     # (4 hub motors: one each). the tires turn it into force in the chassis

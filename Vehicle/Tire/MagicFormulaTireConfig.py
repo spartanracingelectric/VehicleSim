@@ -64,14 +64,14 @@ class MagicFormulaTireConfig: #TODO: load sensitivity (mu changing with Fz), cam
         self.peak_slip_ratio = self.getPeakSlip(self.getB(self.long_stiff_per_load, self.C_long), self.C_long, self.E_long)
         self.peak_slip_angle = self.getPeakSlip(self.getB(self.lat_stiff_per_load, self.C_lat), self.C_lat, self.E_lat)
 
-    def calculateForces(self, tireDownForce, slip_ratio, slip_angle, dt_s=None):
+    def calculateForces(self, tireDownForce, slip_ratio, slip_angle, dt_s=None, apply_filter=True):
         # One call for the chassis, same as the dugoff TireConfig.calculateForces
         self.tireSlipRatio = slip_ratio
         self.tireSlipAngle = slip_angle
         self.tireDownForce = tireDownForce
         self.tireLongitudinalForce = self.calculateTireLongitudinalForce(tireDownForce)
         self.tireLateralForce = self.calculateTireLateralForce(tireDownForce)
-        if self.force_filter_time_constant_s:
+        if self.force_filter_time_constant_s and apply_filter:
             if dt_s is None or dt_s <= 0:
                 raise ValueError("dt_s must be supplied when force filtering is enabled")
             self.tireLongitudinalForce = self._longitudinal_force_filter.update(self.tireLongitudinalForce, dt_s)

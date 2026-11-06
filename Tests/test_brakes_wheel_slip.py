@@ -14,11 +14,11 @@ from Functions.constants import G_MPS2
 from Vehicle.Brake.BrakeConfig import BrakeConfig
 from Vehicle.Chassis.ChassisConfig import ChassisConfig
 from Vehicle.Tire.Configs.tire1 import tire1
-from Vehicle.Tire.Configs.tire1_mf import tire1_mf
 from Tests.scenario import Scenario, runScenario
 from Tests.pedals import hold, steps
 
-TIRES = [tire1, tire1_mf]
+# one tire config, both models (tire.setModel)
+TIRES = [tire1.copy().setModel("dugoff"), tire1.copy().setModel("pacejka")]
 TIRE_IDS = ["dugoff", "magic_formula"]
 
 
@@ -95,7 +95,7 @@ def make_chassis(speed_mps=0.0):
 def run_chassis(chassis, tire, seconds, wheel_torque_Nm=0.0, front_brake_Nm=0.0, rear_brake_Nm=0.0):
     history = []
     for _ in range(round(seconds / DT_S)):
-        chassis.update(wheel_torque_Nm, front_brake_Nm, rear_brake_Nm, 0.038, MASS_KG, tire, DT_S)
+        chassis.update(wheel_torque_Nm, [front_brake_Nm, front_brake_Nm, rear_brake_Nm, rear_brake_Nm], 0.038, MASS_KG, tire, DT_S)
         history.append((chassis.speed_mps, chassis.front_wheel_speed_radps, chassis.rear_wheel_speed_radps,
                         chassis.front_slip_ratio, chassis.rear_slip_ratio))
     return history
@@ -140,13 +140,13 @@ class TestChassis:
         history = run_chassis(chassis, tire, 3.0, front_brake_Nm=2000.0, rear_brake_Nm=2000.0)
         assert chassis.speed_mps < STOPPED_MPS
         assert all(row[1] >= 0.0 and row[2] >= 0.0 for row in history), "a wheel spun backwards"
-        assert any(row[3] == -1.0 for row in history), "front never locked"
+        assert any(row[3] <= -0.99 + 1e-9 for row in history), "front never locked"
         assert all(b[0] <= a[0] for a, b in zip(history, history[1:])), "the car sped up while braking"
 
     def test_locked_stop_takes_about_the_sliding_distance(self, tire):
         chassis = make_chassis(speed_mps=20.0)
         run_chassis(chassis, tire, 3.0, front_brake_Nm=2000.0, rear_brake_Nm=2000.0)
-        sliding_mu = -tire.calculateForces(1000.0, -1.0, 0.0)[0] / 1000.0    # the tire's own locked-wheel grip
+        sliding_mu = -tire.calculateForces(1000.0, -0.99, 0.0)[0] / 1000.0    # the tire's own locked-wheel grip
         expected_m = 20.0 ** 2 / (2 * sliding_mu * G_MPS2)
         assert chassis.distance_m == pytest.approx(expected_m, rel=0.1)
 
@@ -165,7 +165,7 @@ def first_time(result, flags):
 
 # a wheel locked while the car is really moving (at the very end every wheel stops with the car, that doesn't count)
 def locked(result, slip_ratio):
-    return (slip_ratio <= -0.999) & (result.speed_mps > 3.0)
+    return (slip_ratio <= -0.989) & (result.speed_mps > 3.0)
 
 
 def test_full_car_hard_brake_from_60_kph():
@@ -190,7 +190,7 @@ def test_full_car_light_brake_does_not_lock():
 def test_full_car_runs_on_the_magic_formula_tire():
     from Vehicle.MainConfigs.SR18 import SR18
     car = deepcopy(SR18)
-    car.tire = tire1_mf
+    car.tire = tire1.copy().setModel("pacejka")
     result = runScenario(Scenario("magic formula part throttle", pedal=hold(30), run_time_s=0.5, vehicle=car))
     assert result.tire_model == "magic_formula"
     assert result.speed_mps[-1] > 0.0
@@ -247,3 +247,23 @@ def test_regen_replaces_friction_in_the_full_car():
     car.advance(0.05, current_request_A=-60.0, bps_percent=30.0)
     assert car.brake.regen_torque_Nm > 0
     assert car.brake.getFrontWheelTorque_Nm() < car.brake.getFrontRequestedTorque_Nm()
+
+
+class TestRegenPerWheel:
+    def test_regen_can_differ_wheel_to_wheel(self):
+        brake = make_brake()
+        brake.update(40.0, regen_torque_Nm=[10.0, 0.0, 5.0, 0.0])
+        front = brake.getFrontRequestedTorque_Nm()
+        rear = brake.getRearRequestedTorque_Nm()
+        assert brake.getWheelTorques_Nm() == pytest.approx([front - 10.0, front, rear - 5.0, rear])
+
+    def test_one_number_is_every_wheel(self):
+        brake = make_brake()
+        brake.update(40.0, regen_torque_Nm=7.0)
+        same = make_brake()
+        same.update(40.0, regen_torque_Nm=[7.0] * 4)
+        assert brake.getWheelTorques_Nm() == same.getWheelTorques_Nm()
+
+    def test_wrong_number_of_regen_values_is_an_error(self):
+        with pytest.raises(ValueError):
+            make_brake().update(40.0, regen_torque_Nm=[1.0, 2.0])

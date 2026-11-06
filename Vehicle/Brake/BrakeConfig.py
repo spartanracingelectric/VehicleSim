@@ -10,7 +10,7 @@ class BrakeConfig:
     #
     # the torque is how hard the brake can grip the rotor, it only ever slows the wheel down to a stop and never
     # spins it backwards, the chassis does that part (Vehicle/Chassis/ChassisConfig.py)
-    # TODO: hydraulic lag, pad mu changing with temperature, regen (that's the VCU firmware)
+    # TODO: hydraulic lag, pad mu changing with temperature (how much regen there is comes from the motors / VCU firmware)
     def __init__(self, mass_kg, max_pedal_force_N, pedal_ratio, front_bias,
                  front_master_cylinder_bore_m, rear_master_cylinder_bore_m,
                  front_caliper_piston_diameter_m, front_caliper_pistons_per_side,
@@ -44,19 +44,33 @@ class BrakeConfig:
         # brakes off
         self.bps_percent = 0.0
         self.regen_torque_Nm = 0.0
+        self.regen_torques_Nm = [0.0] * 4
         self.front_pressure_Pa = 0.0
         self.rear_pressure_Pa = 0.0
 
     # call every sim step with the brake pedal
-    # regen_torque_Nm: braking torque the motors are already putting on each wheel (>= 0, per wheel).
+    # regen_torque_Nm: braking torque the motors are already putting on each wheel (>= 0). one number for every wheel,
+    # or 4 numbers in wheel order [FL, FR, RL, RR] when the motors make different regen
     # The pedal is the total the driver asked for, so the friction brakes only make up the rest (blended braking).
     # The line pressure is still the full pedal pressure (that's what the pressure sensor reads)
     def update(self, bps_percent, regen_torque_Nm=0.0):
         self.bps_percent = max(0.0, min(bps_percent, 100.0))
-        self.regen_torque_Nm = max(0.0, regen_torque_Nm)
+        self.regen_torques_Nm = self.perWheel(regen_torque_Nm)
+        self.regen_torque_Nm = sum(self.regen_torques_Nm) / 4
         push_rod_force_N = self.bps_percent / 100 * self.max_pedal_force_N * self.pedal_ratio
         self.front_pressure_Pa = push_rod_force_N * self.front_bias / self.front_master_cylinder_area_m2
         self.rear_pressure_Pa = push_rod_force_N * (1 - self.front_bias) / self.rear_master_cylinder_area_m2
+
+    # one number or 4 numbers -> 4 numbers in wheel order [FL, FR, RL, RR], never negative
+    @staticmethod
+    def perWheel(value):
+        try:
+            values = [float(v) for v in value]
+        except TypeError:
+            values = [float(value)] * 4
+        if len(values) != 4:
+            raise ValueError(f"expected 1 or 4 regen torques [FL, FR, RL, RR], got {len(values)}")
+        return [max(0.0, v) for v in values]
 
     # total braking the pedal is asking for, per wheel (regen + friction), what a regen controller blends against
     def getFrontRequestedTorque_Nm(self):
@@ -65,12 +79,22 @@ class BrakeConfig:
     def getRearRequestedTorque_Nm(self):
         return 2 * self.pad_mu * self.rear_pressure_Pa * self.rear_piston_area_m2 * self.rear_rotor_radius_m
 
-    # what the friction brakes still have to hold, per wheel: the request minus what regen already provides
+    # what the friction brakes still have to hold, one per wheel [FL, FR, RL, RR]: the request minus what that wheel's
+    # regen already provides. this is what the chassis takes
+    def getWheelTorques_Nm(self):
+        front = self.getFrontRequestedTorque_Nm()
+        rear = self.getRearRequestedTorque_Nm()
+        requested = (front, front, rear, rear)
+        return [max(0.0, request - regen) for request, regen in zip(requested, self.regen_torques_Nm)]
+
+    # axle averages of the above (same as the per wheel numbers when the regen is the same everywhere)
     def getFrontWheelTorque_Nm(self):
-        return max(0.0, self.getFrontRequestedTorque_Nm() - self.regen_torque_Nm)
+        torques = self.getWheelTorques_Nm()
+        return (torques[0] + torques[1]) / 2
 
     def getRearWheelTorque_Nm(self):
-        return max(0.0, self.getRearRequestedTorque_Nm() - self.regen_torque_Nm)
+        torques = self.getWheelTorques_Nm()
+        return (torques[2] + torques[3]) / 2
 
     # same as the log's Brake Pres Front / Brake Pres Rear (but in Pa)
     def getFrontPressure_Pa(self):

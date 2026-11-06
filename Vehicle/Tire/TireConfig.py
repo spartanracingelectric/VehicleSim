@@ -67,7 +67,8 @@ class TireConfig: #TODO: Add parameters related to tire
         self.tireSlipRatio = (wheel_speed - vehicle_speed) / vehicle_speed if vehicle_speed != 0 else 0.0
         return self.tireSlipRatio
 
-    def calculateForces(self, tireDownForce, slip_ratio, slip_angle, dt_s=None):
+    def calculateForces(self, tireDownForce, slip_ratio, slip_angle, dt_s=None, apply_filter=True):
+        # apply_filter=False: a look at the forces that leaves the force filter alone (the chassis uses it to get the slope)
         # One call for the chassis, every tire model has this so they can be swapped (see MagicFormulaTireConfig)
         # same order as calling them one by one: slip ratio, slip angle, coupling, then the forces
         # slip comes in already calculated, the chassis owns the wheel and car speeds (and the low speed fix)
@@ -76,7 +77,7 @@ class TireConfig: #TODO: Add parameters related to tire
         self.calculateCoupling(tireDownForce)
         longitudinal_force = self.calculateTireLongitudinalForce()
         lateral_force = self.calculateTireLateralForce()
-        if self.force_filter_time_constant_s:
+        if self.force_filter_time_constant_s and apply_filter:
             if dt_s is None or dt_s <= 0:
                 raise ValueError("dt_s must be supplied when force filtering is enabled")
             self.tireLongitudinalForce = self._longitudinal_force_filter.update(longitudinal_force, dt_s)
@@ -123,7 +124,9 @@ class TireConfig: #TODO: Add parameters related to tire
         elif linear_force_magnitude == 0:
             self.tireCouplingFactor = numpy.inf # no slip, nowhere near the limit
         else:
-            self.tireCouplingFactor = (self.tireroadfriction * tireDownForce * (1 + self.tireSlipRatio)) / (2 * linear_force_magnitude)
+            # a tiny linear force makes this huge (or inf), the saturation treats both as not sliding
+            with numpy.errstate(over='ignore'):
+                self.tireCouplingFactor = (self.tireroadfriction * tireDownForce * (1 + self.tireSlipRatio)) / (2 * linear_force_magnitude)
         return self.tireCouplingFactor
 
     def getSaturation(self):

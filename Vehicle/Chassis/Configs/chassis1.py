@@ -7,4 +7,9 @@ chassis1 = ChassisConfig(
     cg_height_m=0.312941529,            # TODO: same as above
     rear_weight_fraction=0.509,         # TODO: same as above, 50.9% static weight on the rear
     wheel_inertia_kgm2=0.225,           # TODO: placeholder, half of tejas's 0.45 for both rear wheels + tires + hubs
+    # the next three are only for the side to side load transfer, we don't have SR18 numbers yet
+    track_front_m=1.2,                  # TODO: placeholder, typical FSAE track
+    track_rear_m=1.2,                   # TODO: placeholder, same
+    roll_stiffness_front_fraction=0.5,  # TODO: placeholder, 50/50 guess, needs the real roll stiffness (springs, ARBs)
+    # min_slip_speed_mps defaults to 0.1 m/s, slip_filter_time_constant_s to 0 (off), see ChassisConfig
 )

@@ -1,8 +1,10 @@
+import argparse
 import numpy as np
 from pathlib import Path
 from Functions.loadConfigs import loadConfigs
 from Vehicle.MainConfigs.SR18 import SR18
 from Data.plot import plot
+from Vehicle.Tire.Tire import Tire
 
 batteryConfigs = loadConfigs("Vehicle.Battery.Configs")
 TRACE_CSV = "Data/autox80kwh.csv"
@@ -24,7 +26,17 @@ class SimRunner:
         self.torque_Nm = np.zeros(len(self.time_s))
         self.power_W = np.zeros(len(self.time_s))
         
-def main():
+# python simrunner.py --tire-model dugoff     (default)
+# python simrunner.py --tire-model pacejka
+# the tire numbers are the same for both, they live in Vehicle/Tire/Configs/tire1.py
+def parseArgs(argv=None):
+    parser = argparse.ArgumentParser(description="vehicle sim")
+    parser.add_argument("--tire-model", choices=Tire.MODELS, default="dugoff", help="which tire model the tires use")
+    return parser.parse_args(argv)
+
+def main(argv=None):
+    args = parseArgs(argv)
+    SR18.tire.setModel(args.tire_model)
     sim = SimRunner(SR18)
     run(sim)
     plot(sim)

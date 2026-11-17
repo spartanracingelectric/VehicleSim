@@ -231,7 +231,7 @@ class PacejkaR20TireConfig:
 
         return fx0, fy0
 
-    def calculateForces(self, Fz_N, slip_ratio, slip_angle_rad):
+    def calculateForces(self, Fz_N, slip_ratio, slip_angle_rad, dt_s=None):
         Fx, Fy = self.tire_forces(Fz_N, slip_ratio, slip_angle_rad)
         return float(Fx), -float(Fy)    # TTC data weird flipping so positive slip angle gives positive (left) Fy
 

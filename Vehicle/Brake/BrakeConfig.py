@@ -44,6 +44,8 @@ class BrakeConfig:
         # brakes off
         self.bps_percent = 0.0
         self.regen_torque_Nm = 0.0
+        self.front_regen_torque_Nm = 0.0
+        self.rear_regen_torque_Nm = 0.0
         self.front_pressure_Pa = 0.0
         self.rear_pressure_Pa = 0.0
 
@@ -53,10 +55,19 @@ class BrakeConfig:
     # The line pressure is still the full pedal pressure (that's what the pressure sensor reads)
     def update(self, bps_percent, regen_torque_Nm=0.0):
         self.bps_percent = max(0.0, min(bps_percent, 100.0))
-        self.regen_torque_Nm = max(0.0, regen_torque_Nm)
+        if isinstance(regen_torque_Nm, (list, tuple)):
+            if len(regen_torque_Nm) != 4:
+                raise ValueError("regen torque must be one value or four values in FL, FR, RL, RR order")
+            front_regen = max(regen_torque_Nm[0], regen_torque_Nm[1])
+            rear_regen = max(regen_torque_Nm[2], regen_torque_Nm[3])
+        else:
+            front_regen = rear_regen = regen_torque_Nm
+        self.regen_torque_Nm = max(0.0, max(front_regen, rear_regen))
         push_rod_force_N = self.bps_percent / 100 * self.max_pedal_force_N * self.pedal_ratio
         self.front_pressure_Pa = push_rod_force_N * self.front_bias / self.front_master_cylinder_area_m2
         self.rear_pressure_Pa = push_rod_force_N * (1 - self.front_bias) / self.rear_master_cylinder_area_m2
+        self.front_regen_torque_Nm = max(0.0, front_regen)
+        self.rear_regen_torque_Nm = max(0.0, rear_regen)
 
     # total braking the pedal is asking for, per wheel (regen + friction), what a regen controller blends against
     def getFrontRequestedTorque_Nm(self):
@@ -67,10 +78,16 @@ class BrakeConfig:
 
     # what the friction brakes still have to hold, per wheel: the request minus what regen already provides
     def getFrontWheelTorque_Nm(self):
-        return max(0.0, self.getFrontRequestedTorque_Nm() - self.regen_torque_Nm)
+        return max(0.0, self.getFrontRequestedTorque_Nm() - self.front_regen_torque_Nm)
 
     def getRearWheelTorque_Nm(self):
-        return max(0.0, self.getRearRequestedTorque_Nm() - self.regen_torque_Nm)
+        return max(0.0, self.getRearRequestedTorque_Nm() - self.rear_regen_torque_Nm)
+
+    def getWheelTorques_Nm(self):
+        return [
+            self.getFrontWheelTorque_Nm(), self.getFrontWheelTorque_Nm(),
+            self.getRearWheelTorque_Nm(), self.getRearWheelTorque_Nm(),
+        ]
 
     # same as the log's Brake Pres Front / Brake Pres Rear (but in Pa)
     def getFrontPressure_Pa(self):

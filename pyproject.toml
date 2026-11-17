@@ -9,6 +9,7 @@ description = "SR18 four-motor powertrain and planar vehicle models for SIL and 
 requires-python = ">=3.10"
 dependencies = [
     "numpy",    # all the car itself needs (Vehicle/, Functions/)
+    "scipy",    # suspension time integration
 ]
 
 [project.optional-dependencies]

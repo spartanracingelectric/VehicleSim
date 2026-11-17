@@ -81,9 +81,10 @@ class VehicleConfig:
         self.bms.updateFromPack(self.battery, control_period_s)
 
         # negative motor torque is regen braking: the friction brakes only make up the rest of the pedal
-        self.brake.update(bps_percent, regen_torque_Nm=max(0.0, -self.getWheelTorque_Nm()))
-        self.chassis.update(self.getWheelTorque_Nm(), self.brake.getFrontWheelTorque_Nm(), self.brake.getRearWheelTorque_Nm(),
-                            self.getDrivelineInertia_kgm2(), self.getMass_kg(), self.tire, control_period_s,
+        wheel_torques_Nm = self.getWheelTorques_Nm()
+        self.brake.update(bps_percent, regen_torque_Nm=[max(0.0, -torque) for torque in wheel_torques_Nm])
+        self.chassis.update(wheel_torques_Nm, self.brake.getWheelTorques_Nm(),
+                            self.getDrivelineInertias_kgm2(), self.getMass_kg(), self.tire, control_period_s,
                             steering_angle_rad=steering_angle_rad)
 
         return self.torque_feedback_Nm
@@ -158,11 +159,17 @@ class VehicleConfig:
     # TODO: each wheel gets its own motor's torque once the chassis has a wheel per corner (torque vectoring)
     # TODO: gearbox losses
     def getWheelTorque_Nm(self):
-        return sum(self.torque_feedback_Nm) * self.gear_ratio / self.getWheelCount()
+        return sum(self.getWheelTorques_Nm()) / self.getWheelCount()
+
+    def getWheelTorques_Nm(self):
+        return [torque * self.gear_ratio for torque in self.torque_feedback_Nm]
 
     # the motors' rotors spin gear_ratio times faster than the wheel, so each one adds Jm * gear_ratio^2 at the wheel
     def getDrivelineInertia_kgm2(self):
         return sum(motor.Jm for motor in self.motors) * self.gear_ratio ** 2 / self.getWheelCount()
+
+    def getDrivelineInertias_kgm2(self):
+        return [motor.Jm * self.gear_ratio ** 2 for motor in self.motors]
 
     def getWheelCount(self):
         return 2 * self.chassis.wheels_per_axle

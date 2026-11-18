@@ -1,3 +1,19 @@
+from Vehicle.Battery.LPTNThermalModel import LPTNThermalModel
+
+
+# sr17 thermal model
+def create_sr17_thermal_model():
+    return LPTNThermalModel(
+        c_pack_j_per_c=30000.0,
+        c_sensor_j_per_c=5657.0,
+        r_link_c_per_w=0.00468,
+        r_th_c_per_w=0.312,
+        q_i2_coeff=0.500,
+        q_iabs_coeff=0.0,
+        q_bias_w=0.0,
+    )
+
+
 from Vehicle.Battery.Cell import Cell
 from Vehicle.Battery.TractiveBatteryPack import TractiveBatteryPack
 
@@ -165,3 +181,20 @@ sr17 = TractiveBatteryPack(
     initial_temp_C=initial_temp_C,
     ambient_temp_C=ambient_temp_C,
 )
+
+
+# sr17 battery pack
+def create_sr17_battery(*, initial_soc=1.0, initial_temp_C=25.0,
+                        ambient_temp_C=25.0, thermal_model="lptn"):
+    from copy import deepcopy
+    from Vehicle.Battery.LPTNThermalModel import LPTNBatteryPack
+
+    if thermal_model == "lptn":
+        battery = LPTNBatteryPack.fromPack(sr17, create_sr17_thermal_model())
+    elif thermal_model == "legacy":
+        battery = deepcopy(sr17)
+    else:
+        raise ValueError("thermal_model must be lptn or legacy")
+    battery.reset(initial_soc=initial_soc, initial_temp_C=initial_temp_C,
+                  ambient_temp_C=ambient_temp_C)
+    return battery

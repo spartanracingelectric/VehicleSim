@@ -26,7 +26,7 @@ def test_at_least_one_tire_config_exists():
 class TestEveryTire:
     def test_is_a_known_tire_model(self, name):
         assert isinstance(tires[name], (TireConfig, MagicFormulaTireConfig, PacejkaR20TireConfig))
-        assert tires[name].model_name in ("dugoff", "magic_formula", "pacejka_r20")
+        assert tires[name].model_name in ("dugoff", "magic_formula", "pacejka_r20", "pacejka_r20_burckhardt")
 
     def test_radius_is_a_plausible_size_in_meters(self, name):
         assert 0.1 <= tires[name].radius_m <= 0.6

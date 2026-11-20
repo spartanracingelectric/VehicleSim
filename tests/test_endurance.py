@@ -1,7 +1,11 @@
+import numpy as np
 import pytest
 
 from Vehicle.Battery.Configs.sr17 import create_sr17_battery
 from Vehicle.Simulation.endurance import EnduranceRun, runEndurance
+
+# two minutes of 40 kW pulls with a little regen between them, at 0.1 s steps
+DEMAND_W = np.tile([40000.0] * 30 + [-5000.0] * 10, 30)
 
 
 def test_run_matches_stepping_the_pack_by_hand_and_leaves_the_given_pack_alone():
@@ -24,3 +28,13 @@ def test_overtemperature_shutdown_ends_the_run():
 def test_a_pack_that_starts_too_hot_never_drives():
     result = runEndurance(EnduranceRun(0.1, [30000.0] * 10, start_temp_C=61.0))
     assert result.shutdown and not result.pack_current_A.any()
+
+
+def test_limit_caps_discharge_and_lets_regen_through():
+    free = runEndurance(EnduranceRun(0.1, DEMAND_W))
+    limited = runEndurance(EnduranceRun(0.1, DEMAND_W, power_limit_W=20000.0))
+    assert free.pack_power_W.max() == pytest.approx(40000.0, rel=0.01)
+    assert limited.pack_power_W.max() == pytest.approx(20000.0, rel=0.01)
+    assert limited.pack_power_W.min() < -4000.0
+    assert limited.peak_temp_C < free.peak_temp_C
+    assert limited.energy_used_kWh < free.energy_used_kWh

@@ -179,15 +179,22 @@ class OneNodeThermalModel:
 
 
 
+# the fits were trained with a sink this far below the start temperature (LPTN-Cooling-Project DESIGN_DECISIONS #16)
+SINK_MARGIN_C = 0.25
+
 
 class LPTNBatteryPack(TractiveBatteryPack):
     # same electrical pack, with a different temperature model
-    def __init__(self, *, thermal_model, **pack_settings):
+    # sink_rule: "trained" cools towards the fit's sink, "ambient" towards ambient_temp_C (the fit never saw that)
+    def __init__(self, *, thermal_model, sink_rule="trained", **pack_settings):
+        if sink_rule not in ("trained", "ambient"):
+            raise ValueError("sink_rule must be trained or ambient")
         self.thermal_model = deepcopy(thermal_model)
+        self.sink_rule = sink_rule
         super().__init__(**pack_settings)
 
     @classmethod
-    def fromPack(cls, pack, thermal_model):
+    def fromPack(cls, pack, thermal_model, sink_rule="trained"):
         settings = {
             name: deepcopy(getattr(pack, name))
             for name in (
@@ -198,11 +205,16 @@ class LPTNBatteryPack(TractiveBatteryPack):
                 "hv_sense_offset_V", "initial_soc", "initial_temp_C", "ambient_temp_C",
             )
         }
-        return cls(thermal_model=thermal_model, **settings)
+        return cls(thermal_model=thermal_model, sink_rule=sink_rule, **settings)
 
     def reset(self, initial_soc=None, initial_temp_C=None, ambient_temp_C=None):
         super().reset(initial_soc, initial_temp_C, ambient_temp_C)
+        self.start_sink_temp_C = self.temp_C - SINK_MARGIN_C
         self.thermal_model.reset(self.temp_C)
+
+    @property
+    def sink_temp_C(self):
+        return self.ambient_temp_C if self.sink_rule == "ambient" else self.start_sink_temp_C
 
     def getPackHeat_W(self, pack_current_A):
         return self.thermal_model.getHeat_W(pack_current_A)
@@ -210,16 +222,16 @@ class LPTNBatteryPack(TractiveBatteryPack):
     # preview the step without changing the thermal state
     def getTemperatureAfterStep_C(self, heat_W, dt_s):
         return self.thermal_model.getTemperaturesAfterStep_C(
-            heat_W, dt_s, self.ambient_temp_C,
+            heat_W, dt_s, self.sink_temp_C,
         )[0]
 
     def update(self, current_A, dt_s):
         super().update(current_A, dt_s)
-        self.thermal_model.update(self.heat_W, dt_s, self.ambient_temp_C)
+        self.thermal_model.update(self.heat_W, dt_s, self.sink_temp_C)
 
     def advanceConstantCurrent(self, current_A, duration_s):
         super().advanceConstantCurrent(current_A, duration_s)
-        self.thermal_model.update(self.heat_W, duration_s, self.ambient_temp_C)
+        self.thermal_model.update(self.heat_W, duration_s, self.sink_temp_C)
 
     @property
     def pack_node_temp_C(self):

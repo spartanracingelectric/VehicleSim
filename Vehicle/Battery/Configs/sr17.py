@@ -185,12 +185,12 @@ sr17 = TractiveBatteryPack(
 
 # sr17 battery pack
 def create_sr17_battery(*, initial_soc=1.0, initial_temp_C=25.0,
-                        ambient_temp_C=25.0, thermal_model="lptn"):
+                        ambient_temp_C=25.0, thermal_model="lptn", sink_rule="trained"):
     from copy import deepcopy
     from Vehicle.Battery.LPTNThermalModel import LPTNBatteryPack
 
     if thermal_model == "lptn":
-        battery = LPTNBatteryPack.fromPack(sr17, create_sr17_thermal_model())
+        battery = LPTNBatteryPack.fromPack(sr17, create_sr17_thermal_model(), sink_rule)
     elif thermal_model == "legacy":
         battery = deepcopy(sr17)
     else:

@@ -49,7 +49,8 @@ class LPTNThermalModel:
         ])
 
         # separate the two cooling rates so each time step can be exact.
-        self.cooling_rates, self.temperature_modes = np.linalg.eig(temperature_rates)
+        # the rates are always real here. numpy 2 returns them as complex with a zero imaginary part
+        self.cooling_rates, self.temperature_modes = (part.real for part in np.linalg.eig(temperature_rates))
         self.inverse_temperature_modes = np.linalg.inv(self.temperature_modes)
         self.heat_modes = self.inverse_temperature_modes @ np.array([
             1 / c_sensor_j_per_c,

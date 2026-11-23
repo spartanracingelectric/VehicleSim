@@ -195,6 +195,7 @@ def create_sr17_battery(*, initial_soc=1.0, initial_temp_C=25.0,
         battery = deepcopy(sr17)
     else:
         raise ValueError("thermal_model must be lptn or legacy")
+    battery.initial_soc, battery.initial_temp_C = initial_soc, initial_temp_C    # a later bare reset() returns here
     battery.reset(initial_soc=initial_soc, initial_temp_C=initial_temp_C,
                   ambient_temp_C=ambient_temp_C)
     return battery

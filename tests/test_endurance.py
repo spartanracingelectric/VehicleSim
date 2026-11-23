@@ -38,3 +38,16 @@ def test_limit_caps_discharge_and_lets_regen_through():
     assert limited.pack_power_W.min() < -4000.0
     assert limited.peak_temp_C < free.peak_temp_C
     assert limited.energy_used_kWh < free.energy_used_kWh
+
+
+def test_limit_can_follow_the_bms_reading():
+    def stopAt42(time_s, battery, bms):
+        return 0.0 if bms.max_temperature_C >= 42 else 40000.0
+    result = runEndurance(EnduranceRun(0.1, [40000.0] * 600, start_temp_C=40.0, power_limit_W=stopAt42))
+    assert result.bms_max_temp_C.max() == 42
+    assert result.pack_power_W[-1] == 0.0
+
+
+def test_a_full_pack_takes_no_regen():
+    result = runEndurance(EnduranceRun(0.1, [-5000.0] * 10))
+    assert not result.pack_current_A.any() and result.soc[-1] == 1.0

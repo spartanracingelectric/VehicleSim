@@ -4,6 +4,7 @@ Install `.[dev]` and run from the repository root:
 
 ```powershell
 python -m examples.battery --duration-s 1
+python -m examples.endurance
 python -m examples.scenarios --help
 python -m examples.motor_inverter
 python -m examples.skidpad

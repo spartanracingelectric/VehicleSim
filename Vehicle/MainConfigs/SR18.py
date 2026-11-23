@@ -13,7 +13,7 @@ from Vehicle.Tire.Configs.tire1 import tire1
 from Vehicle.VCU.Configs.vcu1 import vcu1
 
 
-def create_sr18(*, battery=None, battery_thermal_model=None, initial_temp_C=25.0, ambient_temp_C=25.0):
+def create_sr18(*, battery=None, battery_thermal_model=None, initial_temp_C=None, ambient_temp_C=None):
     """Create a fresh four-drive electrical car with the longitudinal chassis."""
     if battery is None:
         selected_model = "lptn" if battery_thermal_model is None else battery_thermal_model
@@ -22,7 +22,8 @@ def create_sr18(*, battery=None, battery_thermal_model=None, initial_temp_C=25.0
         if battery_thermal_model is not None:
             raise ValueError("Choose the thermal model when creating a custom battery")
         battery = deepcopy(battery)
-    battery.reset(initial_temp_C=initial_temp_C, ambient_temp_C=ambient_temp_C)
+    if initial_temp_C is not None or ambient_temp_C is not None:    # otherwise the battery keeps the state it came with
+        battery.reset(battery.soc, battery.temp_C if initial_temp_C is None else initial_temp_C, ambient_temp_C)
     return VehicleConfig(
         vehicle_mass_kg=204.1, gear_ratio=11.81, num_motors=4,
         battery=battery, axel=deepcopy(axel1), bms=deepcopy(bms1),

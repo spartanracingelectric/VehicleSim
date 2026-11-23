@@ -1,6 +1,6 @@
 import math
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -55,3 +55,21 @@ def runEndurance(run):
     result.energy_used_kWh = battery.discharged_energy_kWh - battery.charged_energy_kWh
     result.shutdown = bms.isShutdown()
     return result
+
+
+# the highest fixed power limit that keeps the pack at or below target_temp_C with no bms shutdown (math.inf if
+# the run needs no limit). a higher limit never gives a cooler run, so this halves the range until it is tolerance_W wide
+def solvePowerLimit_W(run, target_temp_C, tolerance_W=50.0):
+    def isCoolEnough(limit_W):
+        result = runEndurance(replace(run, power_limit_W=limit_W))
+        return not result.shutdown and result.peak_temp_C <= target_temp_C
+
+    if isCoolEnough(None):
+        return math.inf
+    if not isCoolEnough(0.0):
+        raise ValueError(f"No power limit keeps this run at or below {target_temp_C} C")
+    low_W, high_W = 0.0, float(np.max(run.demand_power_W))
+    while high_W - low_W > tolerance_W:
+        middle_W = (low_W + high_W) / 2
+        low_W, high_W = (middle_W, high_W) if isCoolEnough(middle_W) else (low_W, middle_W)
+    return low_W

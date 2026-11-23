@@ -1,8 +1,10 @@
+import math
+
 import numpy as np
 import pytest
 
 from Vehicle.Battery.Configs.sr17 import create_sr17_battery
-from Vehicle.Simulation.endurance import EnduranceRun, runEndurance
+from Vehicle.Simulation.endurance import EnduranceRun, runEndurance, solvePowerLimit_W
 
 # two minutes of 40 kW pulls with a little regen between them, at 0.1 s steps
 DEMAND_W = np.tile([40000.0] * 30 + [-5000.0] * 10, 30)
@@ -51,3 +53,17 @@ def test_limit_can_follow_the_bms_reading():
 def test_a_full_pack_takes_no_regen():
     result = runEndurance(EnduranceRun(0.1, [-5000.0] * 10))
     assert not result.pack_current_A.any() and result.soc[-1] == 1.0
+
+
+def test_solver_finds_the_highest_limit_that_stays_under_the_target():
+    run = EnduranceRun(0.1, np.tile(DEMAND_W, 6), start_temp_C=30.0)
+    target_C = runEndurance(run).peak_temp_C - 5.0
+    limit_W = solvePowerLimit_W(run, target_C)
+    assert runEndurance(EnduranceRun(0.1, run.demand_power_W, limit_W, start_temp_C=30.0)).peak_temp_C <= target_C
+    assert runEndurance(EnduranceRun(0.1, run.demand_power_W, limit_W + 50.0, start_temp_C=30.0)).peak_temp_C > target_C
+
+
+def test_solver_says_when_no_limit_is_needed_or_none_is_enough():
+    assert solvePowerLimit_W(EnduranceRun(0.1, DEMAND_W), target_temp_C=60.0) == math.inf
+    with pytest.raises(ValueError, match="No power limit"):
+        solvePowerLimit_W(EnduranceRun(0.1, DEMAND_W, start_temp_C=50.0), target_temp_C=45.0)

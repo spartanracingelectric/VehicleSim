@@ -1,7 +1,7 @@
 """Supported longitudinal electrical car. Every factory call owns its state."""
 from copy import deepcopy
 from Vehicle.VehicleConfig import VehicleConfig
-from Vehicle.Battery.Configs.sr17 import create_sr17_battery
+from Vehicle.Battery.Configs.sr17 import DEFAULT_SR17_THERMAL_FIT, create_sr17_battery
 from Vehicle.Axel.Configs.axel1 import axel1
 from Vehicle.BMS.Configs.bms1 import bms1
 from Vehicle.Brake.Configs.brake1 import brake1
@@ -13,13 +13,15 @@ from Vehicle.Tire.Configs.tire1 import tire1
 from Vehicle.VCU.Configs.vcu1 import vcu1
 
 
-def create_sr18(*, battery=None, battery_thermal_model=None, initial_temp_C=None, ambient_temp_C=None):
+def create_sr18(*, battery=None, battery_thermal_model=None, battery_thermal_fit=None,
+                initial_temp_C=None, ambient_temp_C=None):
     """Create a fresh four-drive electrical car with the longitudinal chassis."""
     if battery is None:
         selected_model = "lptn" if battery_thermal_model is None else battery_thermal_model
-        battery = create_sr17_battery(thermal_model=selected_model)
+        battery = create_sr17_battery(thermal_model=selected_model,
+                                      thermal_fit=battery_thermal_fit or DEFAULT_SR17_THERMAL_FIT)
     else:
-        if battery_thermal_model is not None:
+        if battery_thermal_model is not None or battery_thermal_fit is not None:
             raise ValueError("Choose the thermal model when creating a custom battery")
         battery = deepcopy(battery)
     if initial_temp_C is not None or ambient_temp_C is not None:    # otherwise the battery keeps the state it came with

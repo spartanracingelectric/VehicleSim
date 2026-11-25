@@ -12,6 +12,15 @@ SR17_THERMAL_FITS = {
         q_iabs_coeff=0.0,
         q_bias_w=0.0,
     ),
+    "refit_2026_10_28": dict(     # 26 heating runs. outputs/sr17_refit/final_params.json
+        c_pack_j_per_c=30000.0,
+        c_sensor_j_per_c=4334.056857758581,
+        r_link_c_per_w=0.006178466210348756,
+        r_th_c_per_w=6.691564141788684,
+        q_i2_coeff=0.38362505036316186,
+        q_iabs_coeff=1.0518132495461079,
+        q_bias_w=0.0,
+    ),
 }
 DEFAULT_SR17_THERMAL_FIT = "frozen_2026_10_22"
 

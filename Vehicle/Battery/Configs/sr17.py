@@ -1,9 +1,9 @@
 from Vehicle.Battery.LPTNThermalModel import LPTNThermalModel
 
 
-# sr17 thermal model
-def create_sr17_thermal_model():
-    return LPTNThermalModel(
+# fitted sr17 pack parameters from LPTN-Cooling-Project. they predict the BMS fault average, not the hottest sensor
+SR17_THERMAL_FITS = {
+    "frozen_2026_10_22": dict(    # 10 heating runs. docs/EXPERIMENTS_2026-10-22_SR17_RETRAIN.md section 4
         c_pack_j_per_c=30000.0,
         c_sensor_j_per_c=5657.0,
         r_link_c_per_w=0.00468,
@@ -11,7 +11,16 @@ def create_sr17_thermal_model():
         q_i2_coeff=0.500,
         q_iabs_coeff=0.0,
         q_bias_w=0.0,
-    )
+    ),
+}
+DEFAULT_SR17_THERMAL_FIT = "frozen_2026_10_22"
+
+
+# sr17 thermal model
+def create_sr17_thermal_model(fit=DEFAULT_SR17_THERMAL_FIT):
+    if fit not in SR17_THERMAL_FITS:
+        raise ValueError(f"thermal fit must be one of {sorted(SR17_THERMAL_FITS)}")
+    return LPTNThermalModel(**SR17_THERMAL_FITS[fit])
 
 
 from Vehicle.Battery.Cell import Cell
@@ -185,12 +194,13 @@ sr17 = TractiveBatteryPack(
 
 # sr17 battery pack
 def create_sr17_battery(*, initial_soc=1.0, initial_temp_C=25.0,
-                        ambient_temp_C=25.0, thermal_model="lptn", sink_rule="trained"):
+                        ambient_temp_C=25.0, thermal_model="lptn", sink_rule="trained",
+                        thermal_fit=DEFAULT_SR17_THERMAL_FIT):
     from copy import deepcopy
     from Vehicle.Battery.LPTNThermalModel import LPTNBatteryPack
 
     if thermal_model == "lptn":
-        battery = LPTNBatteryPack.fromPack(sr17, create_sr17_thermal_model(), sink_rule)
+        battery = LPTNBatteryPack.fromPack(sr17, create_sr17_thermal_model(thermal_fit), sink_rule)
     elif thermal_model == "legacy":
         battery = deepcopy(sr17)
     else:

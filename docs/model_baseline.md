@@ -25,6 +25,15 @@ The longitudinal chassis still averages motor torques and uses a common motor
 speed. It supports longitudinal slip, hydraulic brake/regen blending and an
 experimental lateral extension, but it is not the four-corner planar plant.
 
+Battery temperature will come from the fitted two-node pack model from derating
+by default and `battery_thermal_fit` will pick the parameter set and
+`battery_thermal_model="legacy"` the older adiabatic model. It will predict the
+BMS fault average and cools towards a sink 0.25 C below the start temp which is
+how the fits were trained. Note that the hottest thermistor will not be
+predicted. The logs do not completely pin down how fast the pack cools and
+`Vehicle.Simulation.endurance` steps only the pack and BMS for longer runs
+using power limiting.
+
 ## Planar model
 
 `create_skidpad()` returns a double-track torque-input plant with four wheel
